@@ -59,13 +59,25 @@ A single report should offer both views, clearly separated.
 
 The MVP works **locally**, against **one** Git repository.
 
-It must: compare two commits or tags → assemble evidence → produce a structured change proposal →
-let a person approve, reject or edit it → save approved documentation as a versioned baseline.
+It must: select a revision range → assemble evidence → produce a structured proposal → let a person
+approve, reject or edit it → save approved documentation as a versioned baseline.
+
+A revision range is one of two kinds (D-016):
+
+| Kind | Question answered | Command |
+| --- | --- | --- |
+| **Closed** — `base` → `target` | What changed between two revisions? | `analyse` |
+| **Open** — a single revision | What does this revision do now? | `snapshot` |
+
+Both are needed. A delta alone cannot describe a product: the first baseline for a repository has
+nothing to diff against, the product promise is present-tense, and drift detection presumes a
+documented present state to measure against.
 
 ### 6.1 In scope
 
 - Local Git repository analysis via the `git` command line.
 - Comparison of two revisions (commits or tags), including renames and deletions.
+- Description of the state of a single revision, typically `main` or `master`.
 - Deterministic evidence collection: commit IDs, authors, dates, messages, file paths, bounded diff
   excerpts.
 - Conservative change classification (feature, bug fix, refactor, configuration, API/schema change,
@@ -191,7 +203,7 @@ Recorded rather than guessed at. Each needs a decision before the session that d
 
 | # | Question | Blocks | Current working assumption |
 | --- | --- | --- | --- |
-| Q1 | What is the unit of a "change proposal" — one revision range, one PR, or one business capability? | Session 07 (data model) | One proposal per `(repository, base_rev, target_rev)` range; capability grouping deferred to post-MVP. |
+| Q1 | What is the unit of a proposal — one revision range, one PR, or one business capability? | Session 07 (data model) | **Widened by D-016**, still open: one proposal per `(repository, revision_range)`, where a range is closed (`base`→`target`) or open (single revision). Capability grouping deferred to post-MVP; a cross-repository analysis is several proposals in a group, never one proposal with a shared range. |
 | ~~Q2~~ | ~~Does "behaviour change" mean externally observable behaviour or any code change?~~ | Session 08 | **Resolved → D-010.** Business rule change. |
 | Q3 | What exactly makes a baseline "immutable" — append-only rows, content hashing, or a signed chain? | Session 14 | Append-only versioned rows plus a content hash per baseline version. No cryptographic signing in the MVP. |
 | ~~Q4~~ | ~~How is "documentation drift" defined and detected?~~ | Session 15 | **Resolved → D-012.** Per-claim evidence staleness: `current` / `unverified` / `orphaned`. A signal, never a verdict. |

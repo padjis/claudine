@@ -9,9 +9,28 @@ and verifies the result.
 ## Start of every session
 
 1. Read `PROJECT_STATUS.md` first — it holds the current state and the next single task.
-2. Read `PRODUCT_SPEC.md` § 7 (product rules) and the design documents relevant to the task.
-3. Inspect `git status` and the actual working tree before proposing anything.
-4. Agree on **one** small objective before writing code.
+2. Read `BACKLOG.md` for the ticket being worked on and its done-when criterion.
+3. Read `PRODUCT_SPEC.md` § 7 (product rules) and the design documents relevant to the task.
+4. Inspect `git status` and the actual working tree before proposing anything.
+5. Agree on **one** small objective before writing code.
+
+## Tickets
+
+Work is tracked as `CON-NN` in `BACKLOG.md`. Sessions 01–20 are `CON-01`–`CON-20`; `CON-21`
+onwards is non-session work. Reference the ticket in the commit subject and close it in a trailer:
+
+```
+Session 04: read a local Git repository (CON-04)
+
+...body...
+
+Closes: CON-04
+```
+
+Use `Refs: CON-04` for partial work; `Closes:` only when the done-when criterion is actually met.
+
+**Tickets are not decisions.** A ticket is work that gets closed; a `D-NNN` entry is an immutable
+record of why. Closing a ticket never deletes or supersedes a decision.
 
 ## Scope rules
 
@@ -81,6 +100,8 @@ Update `PROJECT_STATUS.md` with:
 - which tests were run and their **actual** result,
 - known issues and anything deliberately left undone,
 - the next **smallest** task.
+
+Update `BACKLOG.md` with the ticket's new status, and add any ticket the session revealed.
 
 Add a `DECISIONS.md` entry for any decision that constrains future work. Append; never rewrite an
 existing entry — supersede it.

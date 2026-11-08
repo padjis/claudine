@@ -83,6 +83,96 @@ def test_module_is_runnable_without_installation():
     assert constat.__version__ in result.stdout
 
 
+class TestAnalyseCommand:
+    def test_valid_invocation_succeeds_and_echoes_the_inputs(self, capsys):
+        assert main(["analyse", "--repo", "/tmp/r", "--base", "a", "--target", "b"]) == 0
+
+        out = capsys.readouterr().out
+        assert "/tmp/r" in out
+        assert "a" in out and "b" in out
+
+    def test_output_does_not_claim_any_findings(self, capsys):
+        """Nothing has read a repository, so nothing may resemble a result.
+
+        Printing anything findings-shaped here would be unsupported certainty
+        (PRODUCT_SPEC.md rule 1).
+        """
+        main(["analyse", "--repo", "/tmp/r", "--base", "a", "--target", "b"])
+
+        out = capsys.readouterr().out
+        assert "no analysis performed" in out.lower()
+
+    @pytest.mark.parametrize("missing", ["--repo", "--base", "--target"])
+    def test_each_option_is_required(self, missing, capsys):
+        args = ["analyse", "--repo", "/tmp/r", "--base", "a", "--target", "b"]
+        index = args.index(missing)
+        del args[index : index + 2]
+
+        with pytest.raises(SystemExit) as exc:
+            main(args)
+        assert exc.value.code == 2
+        assert missing in capsys.readouterr().err
+
+    def test_repo_has_no_implicit_current_directory_default(self, capsys):
+        """A governance tool must never silently analyse whatever directory it
+        happens to be standing in."""
+        with pytest.raises(SystemExit) as exc:
+            main(["analyse", "--base", "a", "--target", "b"])
+        assert exc.value.code == 2
+        assert "--repo" in capsys.readouterr().err
+
+    def test_invalid_input_exits_two_with_a_message_on_stderr(self, capsys):
+        assert main(["analyse", "--repo", "/tmp/r", "--base", "x", "--target", "x"]) == 2
+
+        captured = capsys.readouterr()
+        assert "nothing to compare" in captured.err
+        assert captured.out == ""
+
+
+class TestSnapshotCommand:
+    def test_valid_invocation_succeeds_and_echoes_the_inputs(self, capsys):
+        assert main(["snapshot", "--repo", "/tmp/r", "--rev", "main"]) == 0
+
+        out = capsys.readouterr().out
+        assert "/tmp/r" in out
+        assert "main" in out
+
+    def test_output_does_not_claim_any_findings(self, capsys):
+        main(["snapshot", "--repo", "/tmp/r", "--rev", "main"])
+        assert "no state described" in capsys.readouterr().out.lower()
+
+    @pytest.mark.parametrize("missing", ["--repo", "--rev"])
+    def test_each_option_is_required(self, missing, capsys):
+        args = ["snapshot", "--repo", "/tmp/r", "--rev", "main"]
+        index = args.index(missing)
+        del args[index : index + 2]
+
+        with pytest.raises(SystemExit) as exc:
+            main(args)
+        assert exc.value.code == 2
+        assert missing in capsys.readouterr().err
+
+    def test_invalid_input_exits_two_with_a_message_on_stderr(self, capsys):
+        assert main(["snapshot", "--repo", "/tmp/r", "--rev", "  "]) == 2
+        assert "--rev must not be empty" in capsys.readouterr().err
+
+
+def test_both_commands_are_listed_in_help(capsys):
+    with pytest.raises(SystemExit):
+        main(["--help"])
+
+    out = capsys.readouterr().out
+    assert "analyse" in out
+    assert "snapshot" in out
+
+
+def test_unknown_subcommand_is_rejected(capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["frobnicate"])
+    assert exc.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err
+
+
 def test_installed_console_script_runs():
     """The `constat` entry point declared in pyproject.toml actually works."""
     executable = f"{sys.prefix}/bin/constat"

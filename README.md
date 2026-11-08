@@ -34,7 +34,7 @@ The MVP workflow:
 
 | Step | Name | What happens |
 | ---- | ---- | ------------ |
-| 1 | Select | Choose a local Git repository and two revisions. |
+| 1 | Select | Choose a local Git repository and either two revisions (what changed) or one (what it does now). |
 | 2 | Analyse | Collect changed files, commits, diff evidence and references. |
 | 3 | Propose | Produce a structured explanation of the possible behaviour change. |
 | 4 | Review | A human edits, approves or rejects the proposal. |
@@ -55,6 +55,7 @@ justifies them. See [ARCHITECTURE.md](ARCHITECTURE.md) § "After the MVP".
 | [ARCHITECTURE.md](ARCHITECTURE.md) | The smallest architecture that supports the MVP, and the shape to grow into later. |
 | [DECISIONS.md](DECISIONS.md) | Dated decision log. Why things are the way they are. |
 | [PROJECT_STATUS.md](PROJECT_STATUS.md) | Current state, the 20-session build roadmap, and the next single task. |
+| [BACKLOG.md](BACKLOG.md) | Ticket register (`CON-NN`), including the non-code legal and validation work. |
 | [CLAUDE.md](CLAUDE.md) | Working agreement for AI-assisted sessions. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute, and the required DCO sign-off. |
 | [LICENSING_STRATEGY.md](LICENSING_STRATEGY.md) | Why Apache-2.0 + DCO, and what it means for a future sale. |
@@ -62,7 +63,40 @@ justifies them. See [ARCHITECTURE.md](ARCHITECTURE.md) § "After the MVP".
 
 ## Getting started
 
-There is nothing to install yet. The Python project skeleton arrives in Session 02 — see
+Requires Python 3.11 or newer. There are **no runtime dependencies** (D-015).
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
+```
+
+Then:
+
+```bash
+.venv/bin/constat --version
+.venv/bin/constat                # prints help
+
+# What changed between two revisions?
+.venv/bin/constat analyse --repo /path/to/repo --base v1.0.0 --target v1.1.0
+
+# What does this branch do now?
+.venv/bin/constat snapshot --repo /path/to/repo --rev main
+```
+
+Both commands currently validate their input and stop — **nothing reads a repository yet**. Every
+option is required: there are no defaults for inputs this important, and in particular `--repo`
+never falls back to the current directory.
+
+Run the tests:
+
+```bash
+.venv/bin/python -m pytest
+```
+
+> **On NixOS** there is no system-wide `pip`. The `venv` above supplies one via `ensurepip`, so the
+> commands work unchanged — just don't expect `pip install` to work outside the virtual environment.
+
+Reading a repository arrives in Session 04 and comparison in Session 05; see
 [PROJECT_STATUS.md](PROJECT_STATUS.md).
 
 ## Naming

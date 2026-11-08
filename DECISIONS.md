@@ -8,6 +8,135 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-018 · 2026-11-08 · `document` initialises a proposal; `review` stays the governance verb
+
+**Decision.** The ticket-scoped command is **`constat document <ref>`**. The word **`review`** is
+reserved for the human approval step (CON-12) and will not be used for anything else.
+
+**Context.** The natural phrasing for "start documenting this ticket's changes" is *review the
+ticket*, but `review` already carries a precise meaning here: a person examining a proposal and
+approving, editing or rejecting it. Two meanings of *review* in one CLI is exactly the conflation
+this product exists to prevent — and it would land on the governance surface, where clarity matters
+most.
+
+**Consequences.**
+
+- `document` is the verb for initialising a proposal from a reference; `review` is the verb for
+  deciding on one. A reader can tell which stage of the workflow a command belongs to from the verb
+  alone.
+- CON-12 keeps `review`, so no ticket needs renaming.
+- The vocabulary is now a fixed, small set worth protecting: `snapshot` (state), `analyse` (change
+  between revisions), `document` (change for a reference), `review` (human decision). A new command
+  should reuse one of these or justify a genuinely new concept.
+
+**Status.** accepted
+
+---
+
+## D-017 · 2026-11-08 · Work is tracked as `CON-NN` tickets in an in-repo backlog
+
+**Decision.** Work is tracked in [BACKLOG.md](BACKLOG.md) as `CON-NN` tickets, versioned alongside
+the code rather than in an external tracker. Sessions 01–20 are `CON-01`–`CON-20`, so session *N* is
+always `CON-NN`. `CON-21` onwards is non-session work. Commits reference the ticket in the subject
+and close it in a `Closes:` trailer.
+
+**Context.** Correlating changes needed stable identifiers. GitHub Issues was the alternative and
+would have given automatic cross-referencing plus a dogfooding story for CON-17/CON-18 — but an
+in-repo register is versioned with the code, works offline, needs no credentials, and is readable in
+a clone. For a project whose premise is durable, inspectable records, keeping the register in the
+repository is the more consistent choice.
+
+**Consequences.**
+
+- **Tickets are not decisions.** A ticket is work that gets closed; a `D-NNN` entry is an immutable
+  record of why. Closing a ticket never deletes or supersedes a decision. Both are referenced from
+  the same commit when a ticket forces one.
+- The register must be updated in the same commit as the work, or it drifts. Added to the
+  end-of-session checklist in `CLAUDE.md`.
+- No automatic cross-referencing: a reader must grep for `CON-NN` rather than following a link. An
+  acceptable cost at this size; revisit if collaborators arrive.
+- `CON-21`–`CON-28` capture the legal, commercial and validation work that no session forces. Two
+  are already overdue — the domain is unregistered and no discovery conversations have been held.
+  Making them tickets is the point: they are the items most easily avoided in favour of code.
+
+**Status.** accepted
+
+---
+
+## D-016 · 2026-11-08 · Constat documents state as well as change
+
+**Decision.** Constat produces two kinds of document, via two commands:
+
+| Command | Question | Unit |
+| --- | --- | --- |
+| `analyse --repo --base --target` | What changed between two revisions? | closed range |
+| `snapshot --repo --rev` | What does this revision do now? | open range |
+
+This supersedes the implicit assumption in D-001 and PRODUCT_SPEC.md section 6 that the MVP only
+ever compares two revisions.
+
+**Context.** The specified MVP produced deltas only, which left a real hole:
+
+- **The first baseline had nothing to diff against.** With delta-only analysis, the earliest
+  approved record for a repository would describe a *change* rather than a *behaviour*, which is not
+  what "approved product knowledge" should mean.
+- **The product promise is present-tense** — "knowledge about how a product behaves" — and the two
+  stated audiences ask what the system *does*, not only what moved last week.
+- **Drift (D-012) presumes a documented present state** to measure approved claims against.
+
+**Consequences.**
+
+- **Q1 is generalised rather than ratified.** The unit of a change proposal is
+  `(repository, revision_range)`, where a range is either *closed* (`base` → `target`) or *open* (a
+  single revision). The earlier working assumption of `(repo, base_rev, target_rev)` was too narrow;
+  it is good that it was never ratified. Q1 remains open pending Session 07.
+- Reports must distinguish the two. A state description and a change description carry different
+  claims, and conflating them would blur provenance — "this is how it behaves" is a different
+  assertion from "this is what moved".
+- `--rev` is required rather than defaulting to HEAD. A snapshot can become an approved baseline, so
+  the revision must be stated by the reviewer, not inferred from whichever branch is checked out.
+- `--rev` is not restricted to a branch name: a tag or SHA is equally valid, and not every release
+  stream has a branch called `main` (product rule 6).
+- Snapshot plumbing can share the evidence collector with analyse — in Git terms a snapshot is a
+  diff against the empty tree — but the *reports* must stay separate documents. Sharing the renderer
+  would be a false economy.
+- PRODUCT_SPEC.md section 6 is updated accordingly. ARCHITECTURE.md section 4's data model needs the
+  open-range case at Session 07.
+
+**Status.** accepted
+
+---
+
+## D-015 · 2026-11-08 · argparse, and zero runtime dependencies for now
+
+**Decision.** The CLI uses stdlib `argparse` rather than `click`. The package declares **no runtime
+dependencies**; `pytest` is the only dev dependency. Build backend is setuptools, version derived
+from `constat.__version__` so metadata cannot drift.
+
+**Context.** ARCHITECTURE.md section 1 left the choice open ("click/argparse"). The roadmap says to
+keep the first version deliberately boring, and CLAUDE.md forbids a new runtime dependency without
+a stated reason. For `--version` and `--help`, argparse is entirely adequate, and argparse handles
+subcommands fine when Session 03 needs them.
+
+Pydantic is still the intended choice for data validation (D-002) and will be added in Session 07
+when there are models to validate — not before.
+
+**Consequences.**
+
+- `pip install constat` pulls nothing else, which keeps the security-review surface minimal for an
+  enterprise pilot. That matters more for this product than CLI ergonomics do.
+- The deterministic evidence path demonstrably cannot depend on an AI provider (D-003), because
+  there is nothing in `dependencies` at all.
+- Revisit if Session 03's revision/option handling becomes unwieldy. Switching to click later is a
+  contained change, because `cli.py` is thin by design and `build_parser()` is isolated from
+  `main()`.
+- Development on NixOS has no system pip; a venv with `ensurepip` supplies one. Recorded in the
+  README so a new contributor is not stuck.
+
+**Status.** accepted
+
+---
+
 ## D-014 · 2026-11-08 · The project website is tryconstat.com
 
 **Decision.** The web presence is **`tryconstat.com`**. Confirmed unregistered on 2026-11-08
