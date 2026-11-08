@@ -8,6 +8,60 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-020 · 2026-11-08 · An ambiguous revision is an error, not a precedence decision
+
+**Decision.** When a revision name matches more than one ref — a branch and a tag of the same name —
+Constat raises `AmbiguousRevision` rather than letting Git's precedence rules pick one. The caller
+must qualify the name (`refs/heads/…`, `refs/tags/…`).
+
+**Context.** Git resolves `collision` to the branch and prints a warning. Accepting that would mean
+documenting one revision while the reviewer may have meant the other, and the report would look
+exactly as confident either way. That is the failure product rule 1 exists to prevent, arriving on
+the input path where it is cheapest to stop.
+
+**Consequences.**
+
+- `rev-parse` must **not** be passed `--quiet`: that flag suppresses the ambiguity warning, which is
+  the only signal Git gives. Verified empirically — with `--quiet` the call exits 0 with empty
+  stderr and the ambiguity is invisible.
+- Detection depends on Git's warning text, so `LC_ALL=C` is set for every Git call to keep the
+  message stable regardless of the user's locale.
+- Not-found must be decided *before* ambiguity: Git's message for an unresolvable revision can also
+  contain the word "ambiguous". A genuinely ambiguous name exits 0; an unknown one exits non-zero.
+- A test pins this behaviour, so a future Git changing its wording fails loudly rather than silently
+  disabling the check.
+
+**Status.** accepted
+
+---
+
+## D-019 · 2026-11-08 · Revisions always resolve through `^{commit}`
+
+**Decision.** Every revision is resolved with `rev-parse --verify --end-of-options <rev>^{commit}`,
+and both the symbolic name and the full 40-character SHA are retained.
+
+**Context.** An annotated tag names a *tag object*, not a commit. Resolving `v2.0.0` without
+`^{commit}` yields the tag object's SHA, which would corrupt every later diff and every piece of
+evidence anchored to it.
+
+This is a bug the real subject repositories **cannot** catch: `237feed` and `237feed-app` both use
+lightweight tags, where `rev-parse v2.0.0` and `rev-parse v2.0.0^{commit}` return the same SHA
+(verified 2026-11-08). The test fixture therefore creates one annotated and one lightweight tag on
+purpose, and asserts the two SHAs differ before asserting which one is used.
+
+**Consequences.**
+
+- Keeping both forms is load-bearing, not redundant: the SHA is what evidence points at and what
+  integrity depends on; the symbolic name is what a reviewer recognises. A report showing only SHAs
+  would be correct and unreadable.
+- `--end-of-options` (Git 2.24+) prevents a revision beginning with `-` being parsed as a flag.
+- Test fixtures must not mirror only the subject repositories' conventions, or they inherit their
+  blind spots.
+
+**Status.** accepted
+
+---
+
 ## D-018 · 2026-11-08 · `document` initialises a proposal; `review` stays the governance verb
 
 **Decision.** The ticket-scoped command is **`constat document <ref>`**. The word **`review`** is

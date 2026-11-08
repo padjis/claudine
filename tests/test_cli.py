@@ -12,6 +12,7 @@ import sys
 import pytest
 
 import constat
+from helpers import git
 from constat.cli import PROG, build_parser, main
 
 
@@ -84,23 +85,70 @@ def test_module_is_runnable_without_installation():
 
 
 class TestAnalyseCommand:
-    def test_valid_invocation_succeeds_and_echoes_the_inputs(self, capsys):
-        assert main(["analyse", "--repo", "/tmp/r", "--base", "a", "--target", "b"]) == 0
+    def test_valid_invocation_resolves_both_revisions(self, repo, capsys):
+        assert (
+            main(
+                ["analyse", "--repo", str(repo), "--base", "v1.0.0", "--target", "main"]
+            )
+            == 0
+        )
 
         out = capsys.readouterr().out
-        assert "/tmp/r" in out
-        assert "a" in out and "b" in out
+        assert str(repo.resolve()) in out
+        assert "v1.0.0" in out and "main" in out
+        # Both forms shown: the SHA for integrity, the symbolic name to read.
+        assert git(repo, "rev-parse", "main") in out
 
-    def test_output_does_not_claim_any_findings(self, capsys):
-        """Nothing has read a repository, so nothing may resemble a result.
-
-        Printing anything findings-shaped here would be unsupported certainty
-        (PRODUCT_SPEC.md rule 1).
-        """
-        main(["analyse", "--repo", "/tmp/r", "--base", "a", "--target", "b"])
+    def test_output_does_not_claim_any_findings(self, repo, capsys):
+        """Revisions are resolved but nothing is compared, so nothing may
+        resemble a result (PRODUCT_SPEC.md rule 1)."""
+        main(["analyse", "--repo", str(repo), "--base", "v1.0.0", "--target", "main"])
 
         out = capsys.readouterr().out
-        assert "no analysis performed" in out.lower()
+        assert "no comparison performed" in out.lower()
+
+    def test_missing_repository_exits_three_not_two(self, tmp_path, capsys):
+        """A well-formed command against a missing repository is a different
+        failure from a malformed command, and gets a different exit code."""
+        code = main(
+            [
+                "analyse",
+                "--repo",
+                str(tmp_path / "nope"),
+                "--base",
+                "a",
+                "--target",
+                "b",
+            ]
+        )
+        assert code == 3
+
+        captured = capsys.readouterr()
+        assert "no such path" in captured.err
+        assert captured.out == ""
+
+    def test_unresolvable_revision_exits_three(self, repo, capsys):
+        code = main(
+            ["analyse", "--repo", str(repo), "--base", "v1.0.0", "--target", "v99.0.0"]
+        )
+        assert code == 3
+        assert "v99.0.0" in capsys.readouterr().err
+
+    def test_subdirectory_reports_the_actual_repository_read(self, repo, capsys):
+        """Scope was widened to the enclosing repository; the user must see it."""
+        subdir = repo / "nested"
+        subdir.mkdir()
+
+        assert (
+            main(
+                ["analyse", "--repo", str(subdir), "--base", "v1.0.0", "--target", "main"]
+            )
+            == 0
+        )
+
+        out = capsys.readouterr().out
+        assert str(repo.resolve()) in out
+        assert "which is inside this repository" in out
 
     @pytest.mark.parametrize("missing", ["--repo", "--base", "--target"])
     def test_each_option_is_required(self, missing, capsys):
@@ -130,16 +178,37 @@ class TestAnalyseCommand:
 
 
 class TestSnapshotCommand:
-    def test_valid_invocation_succeeds_and_echoes_the_inputs(self, capsys):
-        assert main(["snapshot", "--repo", "/tmp/r", "--rev", "main"]) == 0
+    def test_valid_invocation_resolves_the_revision(self, repo, capsys):
+        assert main(["snapshot", "--repo", str(repo), "--rev", "main"]) == 0
 
         out = capsys.readouterr().out
-        assert "/tmp/r" in out
-        assert "main" in out
+        assert str(repo.resolve()) in out
+        assert git(repo, "rev-parse", "main") in out
 
-    def test_output_does_not_claim_any_findings(self, capsys):
-        main(["snapshot", "--repo", "/tmp/r", "--rev", "main"])
+    def test_output_does_not_claim_any_findings(self, repo, capsys):
+        main(["snapshot", "--repo", str(repo), "--rev", "main"])
         assert "no state described" in capsys.readouterr().out.lower()
+
+    def test_detached_head_is_reported_as_such(self, repo, capsys):
+        """Never present a detached HEAD as if it were a branch."""
+        git(repo, "checkout", "--quiet", "--detach", "HEAD")
+        assert main(["snapshot", "--repo", str(repo), "--rev", "HEAD"]) == 0
+        assert "detached HEAD" in capsys.readouterr().out
+
+    def test_directory_that_is_not_a_repository_exits_three(self, empty_dir, capsys):
+        code = main(["snapshot", "--repo", str(empty_dir), "--rev", "main"])
+        assert code == 3
+        assert "not a Git repository" in capsys.readouterr().err
+
+    def test_ambiguous_revision_is_refused_rather_than_guessed(self, repo, capsys):
+        """A name matching both a branch and a tag must not be silently
+        disambiguated — that is how the wrong thing gets documented."""
+        git(repo, "branch", "collision")
+        git(repo, "tag", "collision", "HEAD~1")
+
+        code = main(["snapshot", "--repo", str(repo), "--rev", "collision"])
+        assert code == 3
+        assert "more than one ref" in capsys.readouterr().err
 
     @pytest.mark.parametrize("missing", ["--repo", "--rev"])
     def test_each_option_is_required(self, missing, capsys):

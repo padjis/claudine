@@ -36,15 +36,15 @@ Ticket register. The single source of truth for *what work exists*; the single s
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
 | CON-01 | Create the repository and working agreement | A documented empty project with clear scope and rules. | ✅ `b092b62` |
-| CON-02 | Create the Python project skeleton | The CLI installs and runs locally; tests execute. | ✅ uncommitted |
-| CON-03 | Add configuration and input validation | Helpful errors; no silent defaults for important inputs. | ✅ uncommitted |
-| CON-04 | Read a local Git repository | Tests cover valid, invalid and missing repositories/revisions. | ⬜ next |
+| CON-02 | Create the Python project skeleton | The CLI installs and runs locally; tests execute. | ✅ `68d2ffb` |
+| CON-03 | Add configuration and input validation | Helpful errors; no silent defaults for important inputs. | ✅ `7458423` |
+| CON-04 | Read a local Git repository | Tests cover valid, invalid and missing repositories/revisions. | ✅ |
 
 ## Phase 2 — Evidence engine
 
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
-| CON-05 | Compare two revisions | A deterministic change summary for two revisions. | ⬜ |
+| CON-05 | Compare two revisions | A deterministic change summary for two revisions. | ⬜ next |
 | CON-06 | Collect inspectable evidence | Evidence records can be traced back to Git. | ⬜ |
 | CON-07 | Define the change data model | Stable, tested structured output. | ⬜ |
 
@@ -104,15 +104,32 @@ forces them.
 
 ## Notes on specific tickets
 
-### CON-04 — the tag problem comes due here
+### CON-04 — done, and the tag problem turned out not to be due here
 
-`237feed` carries **777 machine-generated build tags** (`v26113ec4`), while `237feed-app` uses
-**11 semver release tags** (`v2.3.1`). Revision resolution must not present build tags as release
-points, or the tool is unusable against its own primary test subject. Flagged since D-009; this is
-where it stops being theoretical.
+**Corrected during implementation.** This ticket was expected to force the build-tag-versus-release-
+tag problem from D-009. It did not, and the reason matters: **nothing in Constat selects a revision
+for the user.** Every option is required with no default (D-016), so there is no code path that
+could pick a build tag. The problem arrives only when something auto-selects — "latest tag",
+"default branch", "since last release".
 
-Also: `snapshot --rev main` must not assume `main` is *the* default branch. Release streams are
-distinct (product rule 6).
+So the obligation at this stage was *negative*: do not add that convenience. The adapter module
+says so explicitly, and `237feed`'s 777 build tags and `237feed-app`'s 11 semver tags both resolve
+correctly because the caller names them.
+
+The tag classification question moves to whichever ticket first wants to auto-select. It is not
+abandoned, just not yet real.
+
+**What was actually hard here:**
+
+- **Annotated tags** (D-019). Resolution must go through `^{commit}`, and neither subject repository
+  can catch a resolver that forgets to, because both use lightweight tags where the two SHAs
+  coincide. The fixture adds an annotated tag specifically to cover this.
+- **Ambiguous refs** (D-020). `--quiet` hides the only warning Git gives, so it must not be passed.
+- **Subdirectory widening.** `--repo some/subdir` resolves to the enclosing repository. Accepted for
+  convenience, but both paths are kept and the CLI states which repository was actually read —
+  otherwise scope widens silently, which is how a confidently wrong report happens.
+- `branch` is read from HEAD's symref and never inferred. A bare mirror has one too (verified), and
+  `main` is never assumed to be the default branch (product rule 6).
 
 ### CON-07 — blocked on CON-24
 

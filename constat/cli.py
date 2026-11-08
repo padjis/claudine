@@ -12,17 +12,28 @@ import sys
 
 from . import __version__
 from .config import build_request, build_snapshot_request
-from .errors import InvalidInput
+from .errors import InvalidInput, RepositoryError
+from .git import discover_repository, resolve_revision
 
 PROG = "constat"
 DESCRIPTION = "Turn software changes into evidence-backed, human-approved knowledge."
 EPILOGUE = (
-    "Nothing reads a repository yet: both commands validate their input and "
-    "stop. See PROJECT_STATUS.md for what lands next."
+    "Both commands read the repository and resolve revisions, then stop: "
+    "nothing is compared or described yet. See PROJECT_STATUS.md."
 )
 
 EXIT_OK = 0
 EXIT_USAGE = 2  # argparse's own convention for a usage error; reused for bad input.
+EXIT_REPOSITORY = 3  # the input was fine; the repository or revision was not.
+
+
+def _describe_repository(repo) -> None:
+    print(f"repository: {repo.root}")
+    if repo.given != repo.root:
+        # Git widens a subdirectory to its enclosing repository. Say so, rather
+        # than letting the user believe only the subtree was read.
+        print(f"  (given {repo.given}, which is inside this repository)")
+    print(f"branch:     {repo.branch or '(detached HEAD)'}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -104,15 +115,21 @@ def _run_analyse(args: argparse.Namespace) -> int:
         print(f"{PROG}: error: {exc}", file=sys.stderr)
         return EXIT_USAGE
 
-    # Deliberately reports only what it was asked to do. Printing anything that
-    # resembled findings would be unsupported certainty (PRODUCT_SPEC.md rule 1)
-    # since no repository has been read.
-    print(f"repository: {request.repo}")
-    print(f"base:       {request.base}")
-    print(f"target:     {request.target}")
+    try:
+        repo = discover_repository(request.repo)
+        base = resolve_revision(repo, request.base)
+        target = resolve_revision(repo, request.target)
+    except RepositoryError as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_REPOSITORY
+
+    _describe_repository(repo)
+    print(f"base:       {base.symbolic} -> {base.sha}")
+    print(f"target:     {target.symbolic} -> {target.sha}")
     print()
-    print("Input accepted. No repository has been read and no analysis performed:")
-    print("reading the repository is Session 04, comparison is Session 05.")
+    # Reports only what was actually established. Anything resembling findings
+    # would be unsupported certainty (PRODUCT_SPEC.md rule 1): no diff has run.
+    print("Revisions resolved. No comparison performed yet: that is CON-05.")
     return EXIT_OK
 
 
@@ -123,11 +140,17 @@ def _run_snapshot(args: argparse.Namespace) -> int:
         print(f"{PROG}: error: {exc}", file=sys.stderr)
         return EXIT_USAGE
 
-    print(f"repository: {request.repo}")
-    print(f"revision:   {request.rev}")
+    try:
+        repo = discover_repository(request.repo)
+        revision = resolve_revision(repo, request.rev)
+    except RepositoryError as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_REPOSITORY
+
+    _describe_repository(repo)
+    print(f"revision:   {revision.symbolic} -> {revision.sha}")
     print()
-    print("Input accepted. No repository has been read and no state described:")
-    print("reading the repository is Session 04.")
+    print("Revision resolved. No state described yet: that is CON-05 onwards.")
     return EXIT_OK
 
 

@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-08
 **Current phase:** Phase 1 — Foundation
-**Current session:** 03 — Add configuration and input validation
+**Current session:** 04 — Read a local Git repository
 
 ---
 
@@ -11,8 +11,39 @@
 The repository is public at `https://github.com/padjis/constat`. Session 01 was committed and
 pushed as `b092b62`.
 
-The CLI has two commands, `analyse` and `snapshot`. Both validate their input and stop — **nothing
-reads a repository yet**. That is Session 04.
+Both commands now read the repository, confirm it is a Git repository, report its branch and
+resolve revisions to commit SHAs. Nothing is compared or described yet — that is Session 05.
+
+### Session 04 — done when: *tests cover valid, invalid and missing repositories/revisions* ✅
+
+| Item | Status |
+| --- | --- |
+| `constat/git/adapter.py` — read-only, shells out to `git` (D-002) | ✅ |
+| `discover_repository()` — path, repository and branch | ✅ |
+| `resolve_revision()` — symbolic name + full SHA retained (D-019) | ✅ |
+| Distinct error types, separate from `InvalidInput` | ✅ `RepositoryError` and five subtypes |
+| Repository failures exit **3**, malformed input still exits 2 | ✅ |
+| Throwaway-repository fixtures; no dependency on `237feed` | ✅ `tests/conftest.py`, `tests/helpers.py` |
+| Annotated tags resolve to the commit, not the tag object (D-019) | ✅ |
+| Ambiguous revisions refused rather than guessed (D-020) | ✅ |
+| Bare repositories, detached HEAD, unborn HEAD, subdirectories | ✅ |
+| Read-only proven, not asserted | ✅ tests compare `status`/`HEAD`/`show-ref` before and after |
+
+### Tests run
+
+```
+.venv/bin/python -m pytest  →  86 passed in 2.36s
+```
+
+38 new tests. Verified against both real repositories, including their incompatible tag schemes:
+`237feed` build tags (`v26113ec4`) and `237feed-app` semver (`v2.3.1`) both resolve.
+
+### Correction to an earlier claim
+
+I had said the 777-build-tag problem would come due at Session 04. It did not. Nothing in Constat
+selects a revision for the user — every option is required with no default — so no code path can
+pick a build tag. The obligation here was *negative*: do not add "latest tag" convenience. Tag
+classification moves to whichever ticket first wants to auto-select. See `BACKLOG.md`, CON-04.
 
 ### Session 03 — done when: *helpful errors; no silent defaults for important inputs* ✅
 
@@ -129,9 +160,10 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 - **Reports must keep state and change distinct** (D-016). A snapshot asserts "this is how it
   behaves"; an analysis asserts "this is what moved". Session 09 must not collapse them into one
   renderer.
-- **Tag selection is a known design problem**: `237feed` has 777 machine-generated build tags
-  (`v26113ec4`), while `237feed-app` uses semver (`v2.3.1`). Revision resolution must distinguish
-  release tags from build tags. Needed by Session 04.
+- **Tag selection is deferred, not solved.** `237feed` has 777 build tags (`v26113ec4`) against
+  `237feed-app`'s 11 semver tags. This only matters once something *auto-selects* a revision; today
+  nothing does, because every option is required. Due at whichever ticket first adds "latest tag",
+  "default branch" or "since last release".
 - **Copyright holder** recorded as an individual in `LICENSE`/`NOTICE`; change before accepting any
   outside contribution if it should be a company.
 - Q2, Q4, Q8 and Q10 are now resolved (D-010, D-012, D-009, D-011); the product name is resolved
@@ -141,33 +173,31 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-**Session 04 — Read a local Git repository.**
+**Session 05 — Compare two revisions (CON-05).**
 
-Validate the path, confirm it is a Git repository, inspect its current branch, and resolve
-commit/tag references.
-**Done when:** tests cover valid, invalid and missing repositories/revisions.
+Use Git to find changed files, change types and the revision range. Handle renames and deletions
+explicitly.
+**Done when:** a deterministic change summary for two revisions.
 
 Scope for that session:
 
-- A Git adapter shelling out to `git` (D-002); no reimplementation of Git internals.
-- Confirm the path exists and is a work tree or repository; a clear, distinct error per failure mode
-  (missing path, not a directory, directory but not a repository).
-- Resolve a symbolic revision to a full SHA, keeping **both** forms — the SHA for integrity, the
-  symbolic name because that is what a reviewer recognises.
-- A new error type for repository and revision failures, kept separate from `InvalidInput` so the
-  two never blur.
-- Test fixtures that build throwaway repositories rather than depending on `237feed` being present.
+- `git diff --name-status -M` between the two resolved SHAs, parsed into typed file changes.
+- Change types explicit: added, modified, deleted, renamed, copied, type-changed.
+- Renames carry both the old and new path — a rename reported as delete-plus-add would misrepresent
+  the change.
+- Deterministic ordering, so two runs over the same range produce identical output.
 
-Two things to settle while implementing it:
+**The decision to make first: `..` or `...`.** `git diff A..B` compares the two endpoints;
+`git diff A...B` compares from the merge base. For documenting what a change *introduced*, the merge
+base is almost certainly right — "what did target add since it diverged from base", not "how do
+these two trees differ". `237feed` has merges, so this is not academic, and it changes what `base`
+means (config.py already says `base` is the already-known state). Settle it with a `D-NNN` entry.
 
-- **Release tags versus build tags.** `237feed` carries 777 generated build tags. Revision
-  resolution must not present them as release points. This is the known design problem flagged
-  under D-009 and it comes due now.
-- **Does `snapshot --rev main` verify that `main` is the default branch?** It should not assume so;
-  product rule 6 says release streams are distinct.
+Also due: how the empty-tree diff works for `snapshot`, since a state description is a diff against
+nothing. Needed so CON-05 serves both commands rather than only `analyse`.
 
-Explicitly **not** in Session 04: diffing, change summaries or evidence collection. That is Session
-05.
+Explicitly **not** in Session 05: diff *content*, bounded excerpts or evidence records. That is
+CON-06.
 
 ---
 
