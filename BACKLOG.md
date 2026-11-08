@@ -38,14 +38,14 @@ Ticket register. The single source of truth for *what work exists*; the single s
 | CON-01 | Create the repository and working agreement | A documented empty project with clear scope and rules. | ✅ `b092b62` |
 | CON-02 | Create the Python project skeleton | The CLI installs and runs locally; tests execute. | ✅ `68d2ffb` |
 | CON-03 | Add configuration and input validation | Helpful errors; no silent defaults for important inputs. | ✅ `7458423` |
-| CON-04 | Read a local Git repository | Tests cover valid, invalid and missing repositories/revisions. | ✅ |
+| CON-04 | Read a local Git repository | Tests cover valid, invalid and missing repositories/revisions. | ✅ `184fa0b` |
 
 ## Phase 2 — Evidence engine
 
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
-| CON-05 | Compare two revisions | A deterministic change summary for two revisions. | ⬜ next |
-| CON-06 | Collect inspectable evidence | Evidence records can be traced back to Git. | ⬜ |
+| CON-05 | Compare two revisions | A deterministic change summary for two revisions. | ✅ |
+| CON-06 | Collect inspectable evidence | Evidence records can be traced back to Git. | ⬜ next |
 | CON-07 | Define the change data model | Stable, tested structured output. | ⬜ |
 
 ## Phase 3 — Meaning and reporting
@@ -140,8 +140,12 @@ position rather than a decision.
 ### CON-09 — must not collapse state and change
 
 A snapshot asserts "this is how it behaves"; an analysis asserts "this is what moved" (D-016).
-Sharing the evidence collector is fine — in Git terms a snapshot is a diff against the empty tree —
-but sharing the renderer would blur provenance.
+Sharing the evidence collector is fine; sharing the renderer would blur provenance.
+
+**Corrected at CON-05.** This note used to say a snapshot is "a diff against the empty tree". It is
+not, and that framing was the problem: the empty-tree diff labels every file `ADDED`, which is
+change vocabulary answering a state question. State is now read with `ls-tree` and returns plain
+paths with no `ChangeType` at all (D-022).
 
 ### CON-19 — the differentiator, demonstrated late
 

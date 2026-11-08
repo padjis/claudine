@@ -83,9 +83,16 @@ Then:
 .venv/bin/constat snapshot --repo /path/to/repo --rev main
 ```
 
-Both commands currently validate their input and stop — **nothing reads a repository yet**. Every
-option is required: there are no defaults for inputs this important, and in particular `--repo`
-never falls back to the current directory.
+`analyse` reports file-level changes — added, modified, deleted, renamed with both paths. It
+compares **from the merge base**, so work done only on `base` after the fork is excluded rather
+than reported as a deletion (D-021), and the merge base is always stated so the result can be
+verified. A range supplied backwards is refused rather than shown as "no changes".
+
+`snapshot` lists the files present at a revision. It deliberately uses no change vocabulary: a
+state description must not label everything `ADDED` (D-022).
+
+No evidence is collected and nothing is classified yet. Every option is required: there are no
+defaults for inputs this important, and `--repo` never falls back to the current directory.
 
 Run the tests:
 
@@ -96,8 +103,8 @@ Run the tests:
 > **On NixOS** there is no system-wide `pip`. The `venv` above supplies one via `ensurepip`, so the
 > commands work unchanged — just don't expect `pip install` to work outside the virtual environment.
 
-Reading a repository arrives in Session 04 and comparison in Session 05; see
-[PROJECT_STATUS.md](PROJECT_STATUS.md).
+Evidence collection arrives in Session 06 and classification in Session 08; see
+[PROJECT_STATUS.md](PROJECT_STATUS.md) and [BACKLOG.md](BACKLOG.md).
 
 ## Naming
 

@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-08
 **Current phase:** Phase 1 — Foundation
-**Current session:** 04 — Read a local Git repository
+**Current session:** 05 — Compare two revisions
 
 ---
 
@@ -11,8 +11,50 @@
 The repository is public at `https://github.com/padjis/constat`. Session 01 was committed and
 pushed as `b092b62`.
 
-Both commands now read the repository, confirm it is a Git repository, report its branch and
-resolve revisions to commit SHAs. Nothing is compared or described yet — that is Session 05.
+`analyse` produces a deterministic file-level change summary; `snapshot` lists the files present at
+a revision. No evidence is collected and nothing is classified — that is Sessions 06 and 08.
+
+### Session 05 — done when: *a deterministic change summary for two revisions* ✅
+
+| Item | Status |
+| --- | --- |
+| `constat/git/diff.py` — `compare_revisions`, `summarise_state` | ✅ |
+| Merge-base comparison, merge base recorded and always stated (D-021) | ✅ |
+| Renames keep both paths and the similarity score | ✅ |
+| Deletions reported explicitly | ✅ |
+| `ChangeType.UNKNOWN` for unrecognised status letters, never a guess | ✅ |
+| `-z` parsing — paths with spaces, unicode and newlines survive | ✅ |
+| Backwards range refused rather than reported as empty (`BackwardsRange`) | ✅ |
+| Unrelated histories refused (`NoCommonAncestor`) | ✅ |
+| Deterministic: explicit sort, identical output across runs | ✅ |
+| State read with `ls-tree`, no change vocabulary (D-022) | ✅ |
+
+### Tests run
+
+```
+.venv/bin/python -m pytest  →  114 passed
+```
+
+28 new tests. Merges, renames-with-edits, orphan branches, empty commits, awkward filenames and
+read-only guarantees are all covered.
+
+### Verified against real repositories
+
+- `237feed` `v2611f845` → `v26113ec4`: 29 changed files, base is an ancestor of target.
+- `237feed-app` `v2.3.0` → `v2.3.1`: 50 changed files, and the two tags have **diverged** — the
+  merge base is neither tag.
+- `237feed` `snapshot --rev main`: 628 files present.
+- **The `BackwardsRange` guard fired on real data.** A `237feed` build-tag pair supplied in the
+  wrong order was refused. Without it the output would have read "No file changes in this range",
+  which is the confidently-wrong-empty-report failure this product exists to avoid.
+
+### An honest limit on the D-021 evidence
+
+The two diff semantics provably differ — a constructed test shows the endpoint diff reporting a
+base-only file as a deletion. But on real data the difference has **not** yet been observed to
+change a report: for `237feed-app` `v2.3.0`→`v2.3.1`, despite genuine divergence, both semantics
+give identical results (50 files, 1 deletion). D-021 rests on asking the right question, not on an
+observed discrepancy here.
 
 ### Session 04 — done when: *tests cover valid, invalid and missing repositories/revisions* ✅
 
@@ -173,31 +215,31 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-**Session 05 — Compare two revisions (CON-05).**
+**Session 06 — Collect inspectable evidence (CON-06).**
 
-Use Git to find changed files, change types and the revision range. Handle renames and deletions
-explicitly.
-**Done when:** a deterministic change summary for two revisions.
+Capture commit IDs, authors, dates, messages, file paths and bounded diff excerpts. Preserve source
+references so a reviewer can inspect the original.
+**Done when:** evidence records can be traced back to Git.
 
 Scope for that session:
 
-- `git diff --name-status -M` between the two resolved SHAs, parsed into typed file changes.
-- Change types explicit: added, modified, deleted, renamed, copied, type-changed.
-- Renames carry both the old and new path — a rename reported as delete-plus-add would misrepresent
-  the change.
-- Deterministic ordering, so two runs over the same range produce identical output.
+- Commit enumeration with `git log <merge-base>..<target>`, which already has merge-base semantics
+  and so agrees with D-021 without special handling.
+- Bounded diff excerpts per file, with per-file and per-proposal caps (D-005).
+- A source pointer (`rev:path:line-range`) on every excerpt, so the full original is always
+  re-derivable from Git and Constat never becomes the only copy of the evidence.
+- Evidence for `snapshot` too, not only `analyse` — and without borrowing change vocabulary (D-022).
 
-**The decision to make first: `..` or `...`.** `git diff A..B` compares the two endpoints;
-`git diff A...B` compares from the merge base. For documenting what a change *introduced*, the merge
-base is almost certainly right — "what did target add since it diverged from base", not "how do
-these two trees differ". `237feed` has merges, so this is not academic, and it changes what `base`
-means (config.py already says `base` is the already-known state). Settle it with a `D-NNN` entry.
+Two things to settle while implementing it:
 
-Also due: how the empty-tree diff works for `snapshot`, since a state description is a diff against
-nothing. Needed so CON-05 serves both commands rather than only `analyse`.
+- **What the caps actually are.** D-005 requires bounds but names no numbers. `237feed` has merges
+  and a 628-file tree, so a 50-file range with full diffs is already a large document. Pick numbers
+  and record them, rather than leaving a magic constant.
+- **Whether `-M` rename detection should become `-C` (copy detection) as well.** Copies are more
+  expensive to detect and more ambiguous; currently off. Leaving it off is the conservative choice
+  and should be stated rather than defaulted into.
 
-Explicitly **not** in Session 05: diff *content*, bounded excerpts or evidence records. That is
-CON-06.
+Explicitly **not** in Session 06: classification or interpretation. That is CON-08.
 
 ---
 

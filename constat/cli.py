@@ -13,13 +13,19 @@ import sys
 from . import __version__
 from .config import build_request, build_snapshot_request
 from .errors import InvalidInput, RepositoryError
-from .git import discover_repository, resolve_revision
+from .git import (
+    compare_revisions,
+    discover_repository,
+    resolve_revision,
+    summarise_state,
+)
 
 PROG = "constat"
 DESCRIPTION = "Turn software changes into evidence-backed, human-approved knowledge."
 EPILOGUE = (
-    "Both commands read the repository and resolve revisions, then stop: "
-    "nothing is compared or described yet. See PROJECT_STATUS.md."
+    "Reports file-level changes and file inventories only. No evidence is "
+    "collected and nothing is classified or interpreted yet. See "
+    "PROJECT_STATUS.md."
 )
 
 EXIT_OK = 0
@@ -119,6 +125,7 @@ def _run_analyse(args: argparse.Namespace) -> int:
         repo = discover_repository(request.repo)
         base = resolve_revision(repo, request.base)
         target = resolve_revision(repo, request.target)
+        summary = compare_revisions(repo, base, target)
     except RepositoryError as exc:
         print(f"{PROG}: error: {exc}", file=sys.stderr)
         return EXIT_REPOSITORY
@@ -126,10 +133,37 @@ def _run_analyse(args: argparse.Namespace) -> int:
     _describe_repository(repo)
     print(f"base:       {base.symbolic} -> {base.sha}")
     print(f"target:     {target.symbolic} -> {target.sha}")
+
+    # Always stated, because the comparison did not necessarily start at base
+    # (D-021) and the summary cannot be verified without knowing where it did.
+    if summary.base_is_merge_base:
+        print("compared:   from base (base is an ancestor of target)")
+    else:
+        print(f"compared:   from merge base {summary.merge_base}")
+        print("            base and target have diverged; changes made only on")
+        print("            base are excluded, not reported as deletions")
+
     print()
-    # Reports only what was actually established. Anything resembling findings
-    # would be unsupported certainty (PRODUCT_SPEC.md rule 1): no diff has run.
-    print("Revisions resolved. No comparison performed yet: that is CON-05.")
+    if summary.is_empty:
+        print("No file changes in this range.")
+    else:
+        print(f"{len(summary.changes)} changed file(s):")
+        for change in summary.changes:
+            if change.previous_path is not None:
+                score = f" ({change.similarity}% similar)" if change.similarity else ""
+                print(
+                    f"  {change.change_type.name:<12} {change.previous_path}"
+                    f" -> {change.path}{score}"
+                )
+            else:
+                print(f"  {change.change_type.name:<12} {change.path}")
+
+    print()
+    # Says only what was established. Anything interpretive would be
+    # unsupported certainty (PRODUCT_SPEC.md rule 1): no evidence is collected
+    # and nothing has been classified.
+    print("File-level changes only. No evidence collected (CON-06) and no")
+    print("classification attempted (CON-08).")
     return EXIT_OK
 
 
@@ -143,6 +177,7 @@ def _run_snapshot(args: argparse.Namespace) -> int:
     try:
         repo = discover_repository(request.repo)
         revision = resolve_revision(repo, request.rev)
+        state = summarise_state(repo, revision)
     except RepositoryError as exc:
         print(f"{PROG}: error: {exc}", file=sys.stderr)
         return EXIT_REPOSITORY
@@ -150,7 +185,10 @@ def _run_snapshot(args: argparse.Namespace) -> int:
     _describe_repository(repo)
     print(f"revision:   {revision.symbolic} -> {revision.sha}")
     print()
-    print("Revision resolved. No state described yet: that is CON-05 onwards.")
+    print(f"{state.file_count} file(s) present at this revision.")
+    print()
+    print("File inventory only. Nothing here describes behaviour yet: that")
+    print("needs evidence (CON-06) and interpretation (CON-09 onwards).")
     return EXIT_OK
 
 

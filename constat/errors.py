@@ -58,6 +58,24 @@ class AmbiguousRevision(RepositoryError):
     """
 
 
+class NoCommonAncestor(RepositoryError):
+    """Two revisions share no common ancestor, so there is nothing to compare from.
+
+    Happens with grafted or unrelated histories. Reported rather than silently
+    treated as "everything changed".
+    """
+
+
+class BackwardsRange(RepositoryError):
+    """The target is an ancestor of the base, so the range runs backwards.
+
+    Under merge-base comparison (D-021) this would yield an empty diff — a
+    confidently wrong "nothing changed". Almost always means base and target
+    were supplied the wrong way round, so it is refused rather than reported as
+    no change.
+    """
+
+
 class GitCommandFailed(RepositoryError):
     """A git command failed for a reason Constat does not model.
 

@@ -88,7 +88,7 @@ def _env() -> dict[str, str]:
     return env
 
 
-def _git(args: Sequence[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+def run_git(args: Sequence[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     """Run a git command and return the completed process without raising.
 
     Never uses a shell, so no argument can be interpreted as one.
@@ -122,7 +122,7 @@ def discover_repository(path: Path | str) -> Repository:
     if not given.is_dir():
         raise NotARepository(f"not a directory: {given}")
 
-    git_dir = _git(["rev-parse", "--git-dir"], cwd=given)
+    git_dir = run_git(["rev-parse", "--git-dir"], cwd=given)
     if git_dir.returncode != 0:
         raise NotARepository(
             f"{given} is a directory but not a Git repository "
@@ -135,12 +135,12 @@ def discover_repository(path: Path | str) -> Repository:
 
 def _repository_root(path: Path) -> Path:
     """The work-tree root, or the git directory for a bare repository."""
-    toplevel = _git(["rev-parse", "--show-toplevel"], cwd=path)
+    toplevel = run_git(["rev-parse", "--show-toplevel"], cwd=path)
     if toplevel.returncode == 0 and toplevel.stdout.strip():
         return Path(toplevel.stdout.strip())
 
     # Bare repositories have no work tree; the git directory is the repository.
-    absolute = _git(["rev-parse", "--absolute-git-dir"], cwd=path)
+    absolute = run_git(["rev-parse", "--absolute-git-dir"], cwd=path)
     if absolute.returncode == 0 and absolute.stdout.strip():
         return Path(absolute.stdout.strip())
 
@@ -152,7 +152,7 @@ def _repository_root(path: Path) -> Path:
 
 def _current_branch(path: Path) -> str | None:
     """The checked-out branch, or None when detached, bare, or unborn."""
-    result = _git(["symbolic-ref", "--quiet", "--short", "HEAD"], cwd=path)
+    result = run_git(["symbolic-ref", "--quiet", "--short", "HEAD"], cwd=path)
     if result.returncode != 0:
         return None
     return result.stdout.strip() or None
@@ -173,7 +173,7 @@ def resolve_revision(repo: Repository, symbolic: str) -> Revision:
     # flag (git 2.24+). --quiet is deliberately NOT passed: it would suppress
     # the "refname is ambiguous" warning, which is the only signal git gives
     # that a name matched more than one ref.
-    result = _git(
+    result = run_git(
         ["rev-parse", "--verify", "--end-of-options", f"{symbolic}^{{commit}}"],
         cwd=repo.root,
     )

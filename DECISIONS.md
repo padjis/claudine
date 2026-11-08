@@ -8,6 +8,73 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-022 · 2026-11-08 · State is read with `ls-tree`, not as a diff against the empty tree
+
+**Decision.** `summarise_state` lists the files present at a revision using `ls-tree -r`, and
+returns a `StateSummary` carrying plain paths. It does **not** diff against Git's empty tree, and it
+shares no return type with `compare_revisions`.
+
+**Context.** Diffing against the empty tree is the idiomatic trick for "everything at this
+revision", and it was the plan recorded in CON-05's notes. It is wrong here: every file comes back
+labelled `ADDED`. That is change vocabulary answering a state question, and D-016 exists precisely to
+keep the two apart. A snapshot asserts "this is what is present", not "this was all just added" —
+and a reviewer skimming a report full of `ADDED` would reasonably conclude the latter.
+
+`ls-tree` also avoids needing the empty-tree hash, which differs between SHA-1 and SHA-256
+repositories.
+
+**Consequences.**
+
+- `StateSummary` has `paths: tuple[str, ...]`, not `changes`. There is no `ChangeType` present to
+  misread. A test asserts the absence of a `changes` attribute, so a future refactor cannot quietly
+  merge the two shapes.
+- The two renderers stay separate at CON-09, as that ticket's note already requires.
+- Sharing the *evidence collector* between state and change at CON-06 is still fine; it is the
+  vocabulary and the output type that must not be shared.
+
+**Status.** accepted
+
+---
+
+## D-021 · 2026-11-08 · Comparison runs from the merge base, not between endpoints
+
+**Decision.** `compare_revisions` computes `merge-base(base, target)` and diffs from there to
+`target` — equivalent to `git diff base...target`. The merge base is stored on the summary and
+always stated in output.
+
+**Context.** `git diff base..target` compares two endpoints; the merge base asks what `target`
+introduced since it diverged. The second is the question Constat exists to answer: a report
+documenting a change should describe what the change *added*, not how two trees happen to differ.
+Under endpoint comparison, work done only on `base` after the fork appears as a **deletion** in
+`target` — a claim that is simply false, and one that would look exactly as confident as a true one.
+
+**Consequences.**
+
+- **The merge base must be reported.** The comparison does not necessarily start at `base`, and a
+  reviewer cannot verify the summary without knowing where it did start. `base_is_merge_base`
+  distinguishes the simple ancestor case from the diverged one, and the CLI says which applies.
+- **A backwards range had to become an error** (`BackwardsRange`). If `target` is an ancestor of
+  `base`, the merge base *is* `target`, so the diff is empty — "no changes" in answer to reversed
+  arguments. That is the confidently-wrong-empty-report failure, so it is refused with a message
+  naming the fix. This fired immediately on real data: a `237feed` build-tag pair supplied in the
+  wrong order was caught rather than reported as unchanged.
+- `git log A..B` already has merge-base semantics for commit listing, so commit enumeration in
+  CON-06 will agree with this without special handling. Note the asymmetry: `A...B` means
+  merge-base-to-B for `diff` but *symmetric difference* for `log`. Use the explicit merge base
+  rather than three-dot notation, so the two can never be confused.
+
+**Evidence, stated precisely.** The semantics provably differ — a constructed test
+(`test_endpoint_diff_would_have_differed`) shows the endpoint diff reporting a base-only file as a
+deletion while the merge-base diff excludes it. On real data the difference has **not yet been
+observed to change a report**: `237feed-app`'s `v2.3.0` and `v2.3.1` are on divergent lines (the
+merge base is neither tag), yet both semantics yield identical results — 50 changed files with one
+deletion either way. The decision rests on correctness of the question being asked, not on an
+observed discrepancy in this repository.
+
+**Status.** accepted
+
+---
+
 ## D-020 · 2026-11-08 · An ambiguous revision is an error, not a precedence decision
 
 **Decision.** When a revision name matches more than one ref — a branch and a tag of the same name —
