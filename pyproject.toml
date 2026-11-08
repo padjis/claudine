@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "constat"
+description = "Turn software changes into evidence-backed, human-approved knowledge."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Emmanuel Padjinou", email = "emmanuel@padjinou.com" }]
+keywords = ["git", "change-management", "governance", "provenance", "evidence"]
+classifiers = [
+  "Development Status :: 1 - Planning",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Version Control :: Git",
+]
+
+# Deliberately empty. The evidence path must not depend on an AI provider
+# (D-003), and no runtime dependency is added without a stated reason.
+dependencies = []
+
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+constat = "constat.cli:main"
+
+[project.urls]
+Homepage = "https://tryconstat.com"
+Source = "https://github.com/padjis/constat"
+
+[tool.setuptools]
+packages = ["constat"]
+
+# Single source of truth for the version: constat/__init__.py.
+# Keeping it in one place means the CLI and the package metadata cannot drift.
+[tool.setuptools.dynamic]
+version = { attr = "constat.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
