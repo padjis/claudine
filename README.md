@@ -3,8 +3,10 @@
 > Constat turns software changes into evidence-backed, human-approved knowledge about how a
 > product behaves.
 
-**Status: pre-MVP.** Nothing is implemented yet. This repository currently contains only the
-project charter, product specification, architecture sketch and working agreement.
+**Status: pre-MVP, 5 of 20 sessions done.** The CLI reads a local Git repository, resolves
+revisions, and reports file-level changes or a file inventory. It does **not** yet collect evidence,
+classify anything, produce a report, or support review and baselines — see
+[BACKLOG.md](BACKLOG.md) for what exists and what does not.
 
 ## What problem this addresses
 
