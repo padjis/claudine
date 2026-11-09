@@ -337,7 +337,8 @@ Roughly **5% of commits carry any reference**, in four coexisting schemes. Two h
 1. **The pattern must be configurable.** Hardcoding `CON-NN` would make the feature work only on
    repositories that adopted our own convention, and fail on the primary test subject.
 2. **It cannot be the primary entry point.** For comparison, 94 commits touch tracked migrations —
-   the business-rule spine from D-010. Reference density is far below evidence density, so this is
+   the business-rule spine from D-010 (two signals since D-034). Reference density is far below
+   evidence density, so this is
    a precision tool for well-tracked work, not a replacement for range selection. A report built
    from it must say what fraction of the range it accounts for, or it will quietly under-report.
 

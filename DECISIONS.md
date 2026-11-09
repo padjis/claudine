@@ -8,6 +8,47 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-034 · 2026-11-10 · Feature flags are not a business rule source
+
+**Amends D-010**, which listed feature flags as one of three deterministic rule-bearing signals.
+
+**Decision.** Feature flags are removed from the rule model entirely. Constat will not derive
+rules, behaviours or statuses from flag declarations, defaults or descriptions.
+
+**Context.** A flag is a *control over* behaviour, not a statement of it. "This behaviour can be
+switched off" is a delivery and rollout mechanism that any change might use; it says nothing about
+what the rule is. Including it would have made Constat report on the machinery of shipping rather
+than on the rules themselves — a generic property of software change, which is precisely what the
+product is meant to rise above.
+
+Two further reasons, both visible in Subject A:
+
+- Many registered flags are plainly not rules. `padjis.app.version` with default `2.3.0` is
+  configuration; so is an AI prompt template. A rule extractor that emitted those as "business
+  rules" would bury real findings in noise.
+- **The live value is not in the repository.** Flags are seeded into Redis via `setIfAbsent` and
+  edited by operators at runtime (ADR-0001), so a changed default need not change behaviour at
+  all. Constat could only ever have reported "the declared default moved", and reporting that as a
+  behaviour change would have been unsupported certainty on the product's most sensitive surface.
+
+The second point alone would have forced heavy caveating; the first makes the signal low-value;
+the principle makes it wrong in kind. Removing it is cheaper than qualifying it.
+
+**Consequences.**
+
+- **The deterministic spine narrows to two signals**: schema/data migrations, and declarative
+  validation constraints. That is thinner and should be stated plainly rather than implied away.
+- **Coverage in a non-Java repository is now close to zero.** Subject B is TypeScript with no
+  Liquibase migrations and no bean validation, so a rule extractor built on this spine will find
+  nothing there. The document must say "no rule-bearing signals found" rather than "no rules
+  changed" — the two are different claims.
+- Nothing is removed from the code: CON-08 had not been built, so this changes a plan rather than
+  an implementation. Caught before it cost anything.
+
+**Status.** accepted
+
+---
+
 ## D-033 · 2026-11-10 · Evidence is collected per commit, and `ticket add` fills the document
 
 **Decision.** Two things, both about CON-34.
@@ -882,13 +923,16 @@ In the chosen sample repository (D-009) that spine exists and is strong:
 | Signal | Where it lives in Subject A | Why it is rule-bearing |
 | --- | --- | --- |
 | Liquibase migrations | numbered changelog directories in the backend module (74 tracked, ordered, named) | A schema/data migration is almost always a rule or constraint change, and the directory name states the intent. |
-| Feature flags | config registered as flags per the project's own ADR-0001 | A flag *is* a business rule toggle. |
 | Bean validation | `javax.validation` / hibernate-validator annotations in the model module | Declarative constraints: `@NotNull`, `@Size`, `@Pattern` are rules in machine-readable form. |
+
+> **Amended by D-034.** This table originally listed feature flags as a third signal. They are
+> not a rule source: a flag is a control *over* behaviour rather than a statement of it, and its
+> live value is not in the repository at all.
 
 Classification (Session 08) targets these three first. Everything else is `unknown` until a human
 says otherwise. This is a narrower and more defensible MVP than "explain the diff".
 
-**Status.** accepted
+**Status.** accepted; the rule-source table amended by D-034
 
 ---
 
