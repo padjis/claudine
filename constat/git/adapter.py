@@ -22,6 +22,7 @@ from typing import Sequence
 
 from ..errors import (
     AmbiguousRevision,
+    DefaultBranchUnknown,
     GitCommandFailed,
     GitUnavailable,
     NotARepository,
@@ -183,6 +184,47 @@ def root_commits(repo: Repository, revision: Revision) -> tuple[str, ...]:
             "should be impossible for a resolved revision."
         )
     return roots
+
+
+def local_branches(repo: Repository) -> tuple[str, ...]:
+    """Branch names in this repository, sorted. Used to help a failed lookup."""
+    result = run_git(
+        ["for-each-ref", "--format=%(refname:short)", "refs/heads/"], cwd=repo.root
+    )
+    if result.returncode != 0:
+        return ()
+    return tuple(sorted(line.strip() for line in result.stdout.split("\n") if line.strip()))
+
+
+def resolve_default_branch(repo: Repository, remote: str = "origin") -> str:
+    """The repository's default branch, resolved authoritatively or not at all.
+
+    Reads ``refs/remotes/<remote>/HEAD``, which a clone sets to the upstream's
+    default branch. That is the only source that actually answers "which branch
+    is this project's mainline".
+
+    It deliberately does **not** fall back to HEAD's symref. HEAD is whichever
+    branch is checked out right now, so registering while on a feature branch
+    would make that branch the permanent reference point for every comparison
+    (D-028) — wrong in a way nobody would notice. Raises
+    DefaultBranchUnknown instead, so the caller states it explicitly.
+    """
+    result = run_git(
+        ["symbolic-ref", "--quiet", f"refs/remotes/{remote}/HEAD"], cwd=repo.root
+    )
+    ref = result.stdout.strip()
+    prefix = f"refs/remotes/{remote}/"
+    if result.returncode == 0 and ref.startswith(prefix):
+        return ref[len(prefix) :]
+
+    candidates = local_branches(repo)
+    hint = f" Local branches: {', '.join(candidates)}." if candidates else ""
+    raise DefaultBranchUnknown(
+        f"could not determine the default branch of {repo.root}: "
+        f"refs/remotes/{remote}/HEAD is not set. Pass --default-branch "
+        f"explicitly, or run `git remote set-head {remote} -a` in the "
+        f"repository.{hint}"
+    )
 
 
 def resolve_revision(repo: Repository, symbolic: str) -> Revision:

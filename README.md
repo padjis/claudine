@@ -3,7 +3,7 @@
 > Constat turns software changes into evidence-backed, human-approved knowledge about how a
 > product behaves.
 
-**Status: pre-MVP, 7 of 20 sessions done.** The CLI reads a local Git repository, resolves
+**Status: pre-MVP.** Phase 1 and 2 of the original roadmap are done; the project then moved to a workspace model (D-027 to D-030). The CLI reads a local Git repository, resolves
 revisions, and reports file changes, commits and bounded diff evidence. It does **not** yet
 classify anything, produce a report, or support review and baselines — see
 [BACKLOG.md](BACKLOG.md) for what exists and what does not.
@@ -78,6 +78,11 @@ Then:
 ```bash
 .venv/bin/constat --version
 .venv/bin/constat                # prints help
+
+# Set up a workspace and register repositories
+.venv/bin/constat init
+.venv/bin/constat repo add /path/to/repo --name subject-a
+.venv/bin/constat repo list
 
 # What changed between two revisions?
 .venv/bin/constat analyse --repo /path/to/repo --base v1.0.0 --target v1.1.0

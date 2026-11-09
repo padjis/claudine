@@ -62,6 +62,24 @@ class NotARepository(RepositoryError):
     """The path exists but is not a Git repository."""
 
 
+class DefaultBranchUnknown(RepositoryError):
+    """The repository's default branch could not be resolved authoritatively.
+
+    Refused rather than guessed. Under D-028 the default branch is the
+    reference point for every comparison, so inferring it from whichever
+    branch happens to be checked out would silently make a feature branch the
+    baseline for all future documents.
+    """
+
+
+class AlreadyRegistered(WorkspaceError):
+    """This repository is already in the workspace."""
+
+
+class NotRegistered(WorkspaceError):
+    """No repository in the workspace matches that alias."""
+
+
 class RevisionNotFound(RepositoryError):
     """A revision could not be resolved to a commit in this repository."""
 

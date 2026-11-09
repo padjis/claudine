@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-09
 **Current phase:** Phase 2 — Evidence engine
-**Current session:** CON-31 — workspace storage
+**Current session:** CON-32 — repository registry
 
 ---
 
@@ -293,22 +293,54 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-**CON-32 — repository registry.** Add, list and remove repositories; local paths now, remote URLs
-with CON-35.
-**Done when:** a registered repository survives a restart and can be read with the existing Git
-layer.
+**CON-33 — tickets and documents.** A ticket can be opened and owns exactly one living document.
+**Done when:** `ticket add` creates a ticket and its document; both survive a restart; a second
+document for the same ticket is impossible.
 
 Scope:
 
-- `constat repo add <path> [--name]`, `repo list`, `repo remove <name>`.
-- On add: resolve the root-commit identity (D-025) and the default branch (CON-36, D-028), and
-  store both. Neither can be assumed later.
-- Reject a path that is not a Git repository at registration time, using the existing
-  `discover_repository` errors rather than new ones.
-- Registering the same repository twice under different aliases should be detected by identity,
-  not by path — the same repo cloned twice is still one repository.
+- `constat ticket add <reference> [--title]`, `ticket list`, `ticket show <reference>`.
+- Creating a ticket creates its document in the same transaction. A ticket without a document
+  would be a state the model does not allow (D-029), so it must not be reachable even briefly.
+- The document starts empty. Operations fill it at CON-34.
 
-Explicitly **not** in CON-32: remote URLs (CON-35) or anything ticket-shaped (CON-33).
+One thing to settle: **what a reference is allowed to be.** `622`, `CON-04`, `ABC-123` and
+`repo#617` all appear in the real subjects. Resolution (D-030) matches commits against it, so the
+format affects matching. Probably: store it verbatim, and let the matching patterns be configured
+per repository rather than constraining the reference itself.
+
+---
+
+## CON-32 — done when: *a registered repository survives a restart and is readable* ✅
+
+| Item | Status |
+| --- | --- |
+| `constat repo add / list / remove` | ✅ |
+| Identity and default branch resolved and stored at registration | ✅ |
+| Default branch from `origin/HEAD`, never from the checked-out branch | ✅ CON-36 delivered here |
+| Duplicate detection by identity, not path | ✅ |
+| Registration reuses the Git layer's errors | ✅ |
+| `remove` leaves the repository on disk untouched | ✅ asserted |
+| Exit 3 for repository problems, 4 for workspace problems | ✅ |
+
+### Tests run
+
+```
+.venv/bin/python -m pytest  →  248 passed
+```
+
+33 new tests. The clone fixture matters: `origin/HEAD` only exists in a clone, so a `git init`
+repository exercises the refusal path and a clone exercises the resolution path.
+
+### The two refusals
+
+**No default-branch guessing.** Falling back to HEAD's symref would let `repo add` run from a
+feature branch and silently make that branch the baseline for every future comparison. Verified
+against reality: both subjects resolve automatically; this repository, created with `git init`,
+is refused and told to pass `--default-branch` or run `git remote set-head`.
+
+**No duplicate by identity.** A second clone at another path is the same repository (D-025). The
+error names the existing alias and the shared root commit rather than just saying "duplicate".
 
 ---
 

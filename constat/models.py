@@ -90,6 +90,31 @@ class RepositoryRef(Frozen):
         return min(self.root_commits)
 
 
+class RegisteredRepository(Frozen):
+    """A repository in the workspace (D-027).
+
+    ``identity`` is the root commit and is what duplicate detection uses: the
+    same repository cloned twice under two aliases is still one repository,
+    and two different paths can hold the same project (D-025).
+
+    ``default_branch`` is stored rather than resolved per run, because it is
+    the reference point for every comparison (D-028) and must not quietly
+    change when someone checks out a feature branch.
+    """
+
+    alias: str = Field(min_length=1)
+    source: str = Field(min_length=1)
+    source_kind: Literal["local", "remote"]
+    identity: str = Field(pattern=SHA_PATTERN)
+    default_branch: str = Field(min_length=1)
+    added_at: datetime
+    cache_path: str | None = None
+    last_fetched_at: datetime | None = None
+    """When the local copy was last refreshed. None for a local path, which is
+    always current. Unstated staleness is the same class of failure as
+    unstated truncation (D-027)."""
+
+
 class ChangeSelection(Frozen):
     """A closed range: what `target` introduced relative to `base`."""
 

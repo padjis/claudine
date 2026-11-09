@@ -15,7 +15,7 @@ from .config import build_request, build_snapshot_request
 from .errors import InvalidInput, RepositoryError, WorkspaceError
 from .evidence import collect_evidence, describe_commit
 from .mapping import change_proposal, commit_record, state_proposal
-from .store import Workspace, database_path
+from .store import Registry, Workspace, database_path
 from .git import (
     compare_revisions,
     discover_repository,
@@ -72,6 +72,37 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
+
+    repo = subparsers.add_parser(
+        "repo",
+        help="manage the registered repositories",
+        description="Add, list and remove the repositories in the workspace.",
+    )
+    repo_actions = repo.add_subparsers(dest="repo_action", metavar="ACTION")
+
+    repo_add = repo_actions.add_parser(
+        "add", help="register a local repository"
+    )
+    repo_add.add_argument("path", metavar="PATH", help="path to a Git repository")
+    repo_add.add_argument(
+        "--name", metavar="ALIAS", help="alias (default: the directory name)"
+    )
+    repo_add.add_argument(
+        "--default-branch",
+        metavar="BRANCH",
+        help=(
+            "the branch every comparison is measured against. Resolved from "
+            "refs/remotes/origin/HEAD when not given; never guessed from "
+            "whichever branch happens to be checked out."
+        ),
+    )
+
+    repo_actions.add_parser("list", help="list registered repositories")
+
+    repo_remove = repo_actions.add_parser(
+        "remove", help="unregister a repository (the repository itself is untouched)"
+    )
+    repo_remove.add_argument("name", metavar="ALIAS")
 
     subparsers.add_parser(
         "init",
@@ -161,6 +192,55 @@ def _run_init(args: argparse.Namespace) -> int:
     print("Created. It holds registered repositories, tickets and documents.")
     print("Nothing is registered yet: `repo add` arrives with CON-32.")
     return EXIT_OK
+
+
+def _run_repo(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    if args.repo_action is None:
+        parser.parse_args(["repo", "--help"])
+        return EXIT_USAGE
+
+    try:
+        with Workspace.open(args.workspace) as workspace:
+            registry = Registry(workspace)
+
+            if args.repo_action == "add":
+                entry = registry.add(args.path, args.name, args.default_branch)
+                print(f"registered: {entry.alias}")
+                print(f"  source:         {entry.source}")
+                print(f"  identity:       {entry.identity}")
+                print(f"  default branch: {entry.default_branch}")
+                print()
+                print("Identity is the root commit, so this stays the same")
+                print("repository if the checkout moves or is re-cloned.")
+                return EXIT_OK
+
+            if args.repo_action == "list":
+                entries = registry.list()
+                if not entries:
+                    print("No repositories registered. Add one with `repo add`.")
+                    return EXIT_OK
+                print(f"{len(entries)} repository(ies):")
+                for entry in entries:
+                    print(f"  {entry.alias}")
+                    print(f"    source:         {entry.source}")
+                    print(f"    default branch: {entry.default_branch}")
+                    print(f"    identity:       {entry.identity[:12]}")
+                return EXIT_OK
+
+            if args.repo_action == "remove":
+                entry = registry.remove(args.name)
+                print(f"unregistered: {entry.alias} ({entry.source})")
+                print("The repository on disk is untouched; Constat only reads.")
+                return EXIT_OK
+    except WorkspaceError as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_WORKSPACE
+    except RepositoryError as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_REPOSITORY
+
+    parser.error(f"unknown repo action: {args.repo_action}")
+    return EXIT_USAGE  # pragma: no cover
 
 
 def _run_analyse(args: argparse.Namespace) -> int:
@@ -289,6 +369,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "init":
         return _run_init(args)
+
+    if args.command == "repo":
+        return _run_repo(args, parser)
 
     if args.command == "analyse":
         return _run_analyse(args)

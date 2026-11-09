@@ -109,11 +109,11 @@ first seven sessions assumed. The Git and evidence layers are unaffected.
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
 | CON-31 | Workspace storage | A SQLite workspace persists across runs; schema versioned. | ✅ |
-| CON-32 | Repository registry | Repositories can be added, listed and removed; local paths and remote URLs both work. | ⬜ **next** |
-| CON-33 | Tickets and documents | A ticket can be opened and owns exactly one living document. | ⬜ |
+| CON-32 | Repository registry | Repositories can be added, listed and removed; local paths and remote URLs both work. | ✅ local paths; remote URLs are CON-35 |
+| CON-33 | Tickets and documents | A ticket can be opened and owns exactly one living document. | ⬜ **next** |
 | CON-34 | Operations against the set | An operation gathers evidence for a ticket across every registered repository, measured against mainline, and expands the document. | ⬜ |
 | CON-35 | Remote clone-and-cache | A remote URL is cloned into a local cache and read like any local repository; fetch time is recorded. | ⬜ |
-| CON-36 | Default-branch resolution | Each repository's default branch is resolved and stored, never assumed to be `main`. | ⬜ small, needed by CON-34 |
+| CON-36 | Default-branch resolution | Each repository's default branch is resolved and stored, never assumed to be `main`. | ✅ delivered with CON-32 |
 | CON-37 | Merged-ticket semantics | A ticket whose work is already merged still produces a document rather than an empty one. | ✅ resolved by D-030; implementation lands with CON-34 |
 | CON-38 | Cache staleness disclosure | Every document states when each repository's cache was last fetched. | ⬜ |
 
@@ -137,6 +137,19 @@ attributable to the ticket, resolved from a branch name encoding it, commit-mess
 an explicit list. The branch-name signal (`feat/622-…`) is the better one where it exists:
 unambiguous, and independent of commit-message discipline, which only ~5% of Subject A's commits
 exercise.
+
+### CON-32 — two refusals worth keeping
+
+**The default branch is resolved from `refs/remotes/origin/HEAD` or not at all.** It never falls
+back to HEAD's symref, because HEAD is whichever branch is checked out *right now*: registering
+while on a feature branch would make that branch the permanent reference point for every
+comparison (D-028), wrong in a way nobody would notice. A repository created with `git init` has
+no `origin/HEAD` — this one does not — so `--default-branch` must be stated. Verified: both
+subjects resolve to `main` automatically; this repository is refused.
+
+**Duplicates are detected by identity, not path.** The same project cloned to two directories is
+one repository (D-025), and path comparison would miss it. The error names the existing alias and
+the shared root commit.
 
 ### CON-31 — immutability is enforced by the database
 

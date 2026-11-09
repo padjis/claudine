@@ -334,3 +334,87 @@ class TestInitCommand:
         main(["--workspace", target, "init"])
         capsys.readouterr()
         assert main(["--workspace", target, "init"]) == 4
+
+
+class TestRepoCommands:
+    def _ws(self, tmp_path):
+        target = str(tmp_path / "ws")
+        main(["--workspace", target, "init"])
+        return target
+
+    def _clone(self, tmp_path, repo):
+        target = tmp_path / "cloned"
+        git(tmp_path, "clone", "--quiet", str(repo), str(target))
+        return target
+
+    def test_add_then_list(self, tmp_path, repo, capsys):
+        ws = self._ws(tmp_path)
+        cloned = self._clone(tmp_path, repo)
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "repo", "add", str(cloned), "--name", "s"]) == 0
+        assert main(["--workspace", ws, "repo", "list"]) == 0
+
+        out = capsys.readouterr().out
+        assert "s" in out
+        assert "main" in out
+
+    def test_list_on_an_empty_workspace_says_so(self, tmp_path, capsys):
+        ws = self._ws(tmp_path)
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "repo", "list"]) == 0
+        assert "No repositories registered" in capsys.readouterr().out
+
+    def test_duplicate_exits_four_with_the_existing_alias(self, tmp_path, repo, capsys):
+        ws = self._ws(tmp_path)
+        cloned = self._clone(tmp_path, repo)
+        main(["--workspace", ws, "repo", "add", str(cloned), "--name", "first"])
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "repo", "add", str(cloned), "--name", "second"]) == 4
+        assert "first" in capsys.readouterr().err
+
+    def test_unresolvable_default_branch_exits_three(self, tmp_path, repo, capsys):
+        """A repository problem, not a workspace problem."""
+        ws = self._ws(tmp_path)
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "repo", "add", str(repo), "--name", "x"]) == 3
+        assert "--default-branch" in capsys.readouterr().err
+
+    def test_explicit_default_branch_is_accepted(self, tmp_path, repo, capsys):
+        ws = self._ws(tmp_path)
+        capsys.readouterr()
+
+        code = main(
+            ["--workspace", ws, "repo", "add", str(repo), "--name", "x",
+             "--default-branch", "main"]
+        )
+        assert code == 0
+        assert "default branch: main" in capsys.readouterr().out
+
+    def test_remove_reports_the_repository_is_untouched(self, tmp_path, repo, capsys):
+        ws = self._ws(tmp_path)
+        cloned = self._clone(tmp_path, repo)
+        main(["--workspace", ws, "repo", "add", str(cloned), "--name", "s"])
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "repo", "remove", "s"]) == 0
+        assert "untouched" in capsys.readouterr().out
+        assert cloned.exists()
+
+    def test_removing_an_unknown_alias_exits_four(self, tmp_path, capsys):
+        ws = self._ws(tmp_path)
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "repo", "remove", "nope"]) == 4
+        assert "nope" in capsys.readouterr().err
+
+    def test_repo_without_an_action_shows_help(self, tmp_path, capsys):
+        ws = self._ws(tmp_path)
+        capsys.readouterr()
+
+        with pytest.raises(SystemExit):
+            main(["--workspace", ws, "repo"])
+        assert "add" in capsys.readouterr().out
