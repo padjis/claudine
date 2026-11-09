@@ -12,9 +12,10 @@ import sys
 
 from . import __version__
 from .config import build_request, build_snapshot_request
-from .errors import InvalidInput, RepositoryError
+from .errors import InvalidInput, RepositoryError, WorkspaceError
 from .evidence import collect_evidence, describe_commit
 from .mapping import change_proposal, commit_record, state_proposal
+from .store import Workspace, database_path
 from .git import (
     compare_revisions,
     discover_repository,
@@ -32,6 +33,7 @@ EPILOGUE = (
 EXIT_OK = 0
 EXIT_USAGE = 2  # argparse's own convention for a usage error; reused for bad input.
 EXIT_REPOSITORY = 3  # the input was fine; the repository or revision was not.
+EXIT_WORKSPACE = 4  # Constat's own stored state could not be opened or created.
 
 
 def _describe_repository(repo) -> None:
@@ -60,7 +62,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="show the version and exit",
     )
 
+    parser.add_argument(
+        "--workspace",
+        metavar="PATH",
+        help=(
+            "workspace directory (default: $CONSTAT_HOME, else ~/.constat). "
+            "The workspace in use is always reported, never assumed silently."
+        ),
+    )
+
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
+
+    subparsers.add_parser(
+        "init",
+        help="create a workspace",
+        description=(
+            "Create the workspace that holds registered repositories, tickets "
+            "and the immutable record of approvals. Refuses to overwrite an "
+            "existing workspace."
+        ),
+    )
 
     analyse = subparsers.add_parser(
         "analyse",
@@ -123,6 +144,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     return parser
+
+
+def _run_init(args: argparse.Namespace) -> int:
+    try:
+        with Workspace.create(args.workspace) as workspace:
+            path = workspace.path
+            version = workspace.schema_version
+    except WorkspaceError as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_WORKSPACE
+
+    print(f"workspace:  {path}")
+    print(f"schema:     version {version}")
+    print()
+    print("Created. It holds registered repositories, tickets and documents.")
+    print("Nothing is registered yet: `repo add` arrives with CON-32.")
+    return EXIT_OK
 
 
 def _run_analyse(args: argparse.Namespace) -> int:
@@ -248,6 +286,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command is None:
         parser.print_help()
         return EXIT_OK
+
+    if args.command == "init":
+        return _run_init(args)
 
     if args.command == "analyse":
         return _run_analyse(args)

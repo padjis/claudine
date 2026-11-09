@@ -300,3 +300,37 @@ class TestJsonOutput:
         assert first.selection_key == second.selection_key
         assert first.changes == second.changes
         assert first.evidence == second.evidence
+
+
+class TestInitCommand:
+    def test_init_creates_a_workspace(self, tmp_path, capsys):
+        assert main(["--workspace", str(tmp_path / "ws"), "init"]) == 0
+
+        out = capsys.readouterr().out
+        assert "workspace:" in out
+        assert "schema:     version 1" in out
+        assert (tmp_path / "ws" / "workspace.db").exists()
+
+    def test_init_reports_the_workspace_it_used(self, tmp_path, capsys):
+        """A default location is acceptable; an undisclosed one is not."""
+        target = tmp_path / "ws"
+        main(["--workspace", str(target), "init"])
+        assert str(target) in capsys.readouterr().out
+
+    def test_init_refuses_to_overwrite_and_exits_four(self, tmp_path, capsys):
+        """Stored decisions must survive a careless second init."""
+        target = str(tmp_path / "ws")
+        main(["--workspace", target, "init"])
+        capsys.readouterr()
+
+        assert main(["--workspace", target, "init"]) == 4
+        captured = capsys.readouterr()
+        assert "already exists" in captured.err
+        assert captured.out == ""
+
+    def test_workspace_errors_use_their_own_exit_code(self, tmp_path, capsys):
+        """2 is malformed input, 3 is the repository, 4 is our own state."""
+        target = str(tmp_path / "ws")
+        main(["--workspace", target, "init"])
+        capsys.readouterr()
+        assert main(["--workspace", target, "init"]) == 4

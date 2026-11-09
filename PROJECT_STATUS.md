@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-09
 **Current phase:** Phase 2 — Evidence engine
-**Current session:** direction change — re-planning before CON-31
+**Current session:** CON-31 — workspace storage
 
 ---
 
@@ -293,49 +293,60 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-**CON-31 — workspace storage.** A SQLite workspace that persists across runs, schema versioned.
-**Done when:** a restart does not lose registered repositories, tickets or documents.
+**CON-32 — repository registry.** Add, list and remove repositories; local paths now, remote URLs
+with CON-35.
+**Done when:** a registered repository survives a restart and can be read with the existing Git
+layer.
 
-Prerequisite for the whole workspace model. Nothing below it works without storage.
+Scope:
 
-### Why the plan changed
+- `constat repo add <path> [--name]`, `repo list`, `repo remove <name>`.
+- On add: resolve the root-commit identity (D-025) and the default branch (CON-36, D-028), and
+  store both. Neither can be assumed later.
+- Reject a path that is not a Git repository at registration time, using the existing
+  `discover_repository` errors rather than new ones.
+- Registering the same repository twice under different aliases should be detected by identity,
+  not by path — the same repo cloned twice is still one repository.
 
-The first seven sessions assumed a stateless, single-repository, one-shot tool. The intended shape
-is a **workspace**: a registered set of repositories, operations applied across the set, always
-measured against mainline, accumulating into one living document per ticket.
+Explicitly **not** in CON-32: remote URLs (CON-35) or anything ticket-shaped (CON-33).
 
-Recorded as D-027 (workspace), D-028 (mainline-only), D-029 (ticket documents). The new work is
-CON-31 through CON-38.
+---
 
-### What survives
+## CON-31 — done when: *a restart does not lose repositories, tickets or documents* ✅
 
-Everything in `constat/git/` and `constat/evidence/` — repository reading, revision resolution,
-merge-base comparison, bounded evidence with reproduce commands. `RevisionRef`, `CommitRecord`,
-`FileChangeRecord`, `EvidenceRecord` and `Completeness` carry over unchanged. A cached clone is an
-ordinary local repository, which is why clone-and-cache beat API access: one read path, not two.
+| Item | Status |
+| --- | --- |
+| `constat/store/` — SQLite workspace, versioned schema | ✅ |
+| `constat init`, reporting the workspace it used | ✅ |
+| Refuses to overwrite an existing workspace | ✅ exit 4 |
+| Refuses a newer *or* older schema rather than guessing | ✅ |
+| Append-only `document_version`, enforced by triggers | ✅ UPDATE and DELETE both abort |
+| One document per ticket, enforced by `UNIQUE` | ✅ |
+| Foreign keys on (SQLite defaults them off) | ✅ |
+| Operations recorded against documents | ✅ table in place |
+| Exit code 4 for workspace errors, distinct from 2 and 3 | ✅ |
 
-The 179 tests still pass untouched.
+### Tests run
 
-### What changes
+```
+.venv/bin/python -m pytest  →  215 passed
+```
 
-- `Proposal`-per-run becomes `Document`-per-ticket (D-029).
-- `--base`/`--target` leave the CLI; `compare_revisions` stays and always receives mainline.
-- Persistence moves from CON-13 (Phase 4) to CON-31 (now).
-- **CON-30 is withdrawn.** It existed because proposal-per-run was the wrong unit; the new model
-  does not have the problem.
-- MVP acceptance criterion 2 is amended: release-to-release comparison leaves scope, because a
-  release tag is normally an ancestor of mainline and so has no mainline framing. Flagged before
-  the decision and accepted with the cost understood.
+36 new tests. The append-only ones assert the triggers actually fire: a trigger that does not is
+worse than no trigger, because it looks like protection.
 
-### The one unresolved piece: CON-37
+### One bug the tests caught
 
-Mainline-only works for divergent work. Once a ticket is **merged** there is no divergence, and
-"what does this add to mainline" answers "nothing" — so every merged ticket would document as
-empty. A merged ticket's document has to be built from the effect of its commits instead, which is
-the `commit_set` selection reserved in D-025 arriving earlier than planned.
+Opening a non-database file leaked a raw `sqlite3.DatabaseError` traceback instead of a Constat
+error. Fixed in the connection wrapper — "fail clearly" is the standard the project set itself,
+and a stack trace does not meet it.
 
-This needs settling before CON-34, and it is not a detail: most tickets worth documenting are
-already merged.
+### Design note
+
+Immutability is enforced **by the database**, not by application code. `document_version` rejects
+`UPDATE` and `DELETE` outright, so a future bug cannot rewrite an approval by forgetting to call
+the right helper. Same reasoning for one-document-per-ticket, the decision `CHECK`, and foreign
+keys: ARCHITECTURE.md section 5 rules belong where they cannot be bypassed.
 
 ---
 

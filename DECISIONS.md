@@ -8,6 +8,60 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-030 · 2026-11-09 · A ticket resolves to a commit set; mainline stays the reference
+
+**Resolves CON-37.**
+
+**Decision.** The *reference point* is always mainline (D-028 stands). The *target* is a **commit
+set** attributable to a ticket, not a branch tip. A ticket's commits are resolved from, in order:
+
+1. **A branch whose name encodes the ticket** — `feat/622-prune-dead-fcm-tokens` names ticket 622.
+   Unambiguous while the branch exists.
+2. **Commit-message references** — the configurable pattern from CON-29.
+3. **An explicit commit list**, supplied by a human.
+
+The effect of that set is expressed against the mainline tree.
+
+**Context.** An integration-branch workflow was proposed as the answer, and in principle it works:
+work on `develop` diverges from mainline, so there is something to measure. Checked against the
+real subjects on 2026-11-09, it does not hold:
+
+| Branch | Ahead of mainline | Behind |
+| --- | --- | --- |
+| Subject A `develop` | **0** | 1119 |
+| Subject A `feat/622-…` | **0** | 10 |
+| Subject A `release/…` | **0** | 362 |
+| Subject B `release/1.2.0` | **0** | 182 |
+
+Every branch is zero ahead; Subject B has no integration branch at all. Ticket 622's commit is
+already in mainline, `merge-base(main, feat/622) == tip of feat/622`, and the diff between them is
+**0 files**. Under branch-divergence alone, documenting ticket 622 would produce an empty
+document while the work sits plainly in history.
+
+Both teams also rebase rather than merge — 3 merge commits in Subject A's last 200, zero in
+Subject B's — so a ticket's commits do not survive as a distinguishable merge group.
+
+**Consequences.**
+
+- This is the `commit_set` selection reserved in D-025, now required rather than speculative.
+- **Already-merged work becomes documentable**, which matters because all of both subjects is
+  already merged. Branch divergence alone would have made Constat unable to document its own
+  primary test data — a failure that would otherwise have surfaced at CON-34.
+- Branch-name resolution is a genuinely better signal than commit messages where it exists:
+  unambiguous, and it does not depend on commit discipline. Only ~5% of Subject A's commits carry
+  any reference at all.
+- Resolution order matters and must be reported. A document has to state *how* its commit set was
+  determined, because "the branch said so" and "a human listed them" are different provenance
+  (product rule 3).
+- A commit set may be **empty**, and that is a legitimate answer meaning "no commits reference this
+  ticket" — not "this ticket changed nothing". The two must not be rendered alike.
+- Prospective documentation still works and is still better: a ticket documented before it merges
+  has a live branch, and approval freezes the version (D-029) so it survives the merge.
+
+**Status.** accepted
+
+---
+
 ## D-029 · 2026-11-09 · A ticket owns one living document, frozen on approval
 
 **Supersedes D-025's proposal-per-run model.** D-025's identity reasoning survives; its top-level

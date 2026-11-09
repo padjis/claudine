@@ -108,30 +108,46 @@ first seven sessions assumed. The Git and evidence layers are unaffected.
 
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
-| CON-31 | Workspace storage | A SQLite workspace persists across runs; schema versioned. | ⬜ **next** — prerequisite for everything below |
-| CON-32 | Repository registry | Repositories can be added, listed and removed; local paths and remote URLs both work. | ⬜ |
+| CON-31 | Workspace storage | A SQLite workspace persists across runs; schema versioned. | ✅ |
+| CON-32 | Repository registry | Repositories can be added, listed and removed; local paths and remote URLs both work. | ⬜ **next** |
 | CON-33 | Tickets and documents | A ticket can be opened and owns exactly one living document. | ⬜ |
 | CON-34 | Operations against the set | An operation gathers evidence for a ticket across every registered repository, measured against mainline, and expands the document. | ⬜ |
 | CON-35 | Remote clone-and-cache | A remote URL is cloned into a local cache and read like any local repository; fetch time is recorded. | ⬜ |
 | CON-36 | Default-branch resolution | Each repository's default branch is resolved and stored, never assumed to be `main`. | ⬜ small, needed by CON-34 |
-| CON-37 | Merged-ticket semantics | A ticket whose work is already merged still produces a document rather than an empty one. | ⬜ **unresolved design** — see note |
+| CON-37 | Merged-ticket semantics | A ticket whose work is already merged still produces a document rather than an empty one. | ✅ resolved by D-030; implementation lands with CON-34 |
 | CON-38 | Cache staleness disclosure | Every document states when each repository's cache was last fetched. | ⬜ |
 
 ---
 
 ## Notes on specific tickets
 
-### CON-37 — the one genuinely unresolved piece
+### CON-37 — resolved by measurement, not by argument (D-030)
 
-D-028 makes mainline the only reference point, which works for divergent work: `compare(mainline,
-branch)` is "what this adds". Once a ticket is **merged**, there is no divergence left and the
-same question answers "nothing".
+An integration-branch workflow was proposed as the answer. Checked against the real subjects it
+did not hold: **every branch is zero commits ahead of mainline.** Subject A's `develop` is 0 ahead
+and 1119 behind; its `feat/622-…` ticket branch is 0 ahead and 10 behind; Subject B has no
+integration branch at all. Ticket 622's work is already in mainline, and the diff between
+`merge-base(main, feat/622)` and the branch tip is **0 files**.
 
-So a merged ticket's document must be built from the *effect of its commits* rather than from a
-branch's divergence from mainline. That is the `commit_set` selection reserved in D-025, arriving
-earlier than planned. Needs settling before CON-34, because most tickets worth documenting are
-already merged — measured on Subject A, roughly 5% of commits even carry a reference, and those
-that do are overwhelmingly in mainline already.
+So branch divergence alone would have produced an empty document for a ticket whose work sits
+plainly in history — and Constat would have been unable to document its own primary test data.
+
+Resolved as D-030: mainline stays the reference point, but the target is a **commit set**
+attributable to the ticket, resolved from a branch name encoding it, commit-message references, or
+an explicit list. The branch-name signal (`feat/622-…`) is the better one where it exists:
+unambiguous, and independent of commit-message discipline, which only ~5% of Subject A's commits
+exercise.
+
+### CON-31 — immutability is enforced by the database
+
+Append-only history is a database trigger, not an application convention. `document_version`
+rejects `UPDATE` and `DELETE` outright, so a future bug cannot quietly rewrite an approval by
+forgetting to call the right helper. Tests assert the triggers actually fire — a trigger that does
+not is worse than none, because it looks like protection.
+
+Also enforced in schema rather than code: one document per ticket (`UNIQUE` on `ticket_id`), only
+`approved`/`rejected` as decisions, and foreign keys on — SQLite leaves those off by default, so
+referential integrity has to be requested on every connection.
 
 ### CON-31 — why persistence moved
 

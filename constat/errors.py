@@ -21,6 +21,23 @@ class InvalidInput(ConstatError):
     """
 
 
+class WorkspaceError(ConstatError):
+    """The workspace could not be opened, created or understood.
+
+    Distinct from RepositoryError: this is about Constat's own stored state,
+    not about the repositories it reads.
+    """
+
+
+class WorkspaceVersionError(WorkspaceError):
+    """The workspace schema does not match this version of Constat.
+
+    Refused rather than guessed at. Reading governance records under a schema
+    you do not understand risks misinterpreting an approval, which is worse
+    than failing to open the file.
+    """
+
+
 class RepositoryError(ConstatError):
     """The repository or a revision within it could not be read.
 
