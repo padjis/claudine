@@ -15,7 +15,7 @@ smallest need first: each file is offered an equal share of what remains, takes 
 and the surplus is redistributed. Files are never served in path order.
 
 **Context.** The first implementation spent the budget as it walked the sorted change list. Run
-against `237feed-app` `v2.3.0`→`v2.3.1` it produced the obvious failure: `package-lock.json` sorts
+against a Subject B release range it produced the obvious failure: a generated lockfile sorts
 early, took its full 400-line allowance out of a 4000-line budget, and files later in the alphabet
 received **nothing**. Which evidence a reviewer saw depended on filename ordering.
 
@@ -26,7 +26,7 @@ confident either way.
 **Consequences.**
 
 - Measured on the same real range after the change: **49 of 50 files captured whole**, with only
-  `package-lock.json` truncated (393 of 3835 lines). The generated file absorbs the loss instead of
+  the lockfile truncated (393 of 3835 lines). The generated file absorbs the loss instead of
   imposing it on source files.
 - Allocation requires reading every diff before keeping any of it, so the whole range is held in
   memory briefly. Acceptable at this scale (7442 lines is well under a megabyte); revisit if a range
@@ -54,8 +54,8 @@ subject repositories on 2026-11-08 rather than invented:
 
 | Range | Files | Diff lines | Largest file |
 | --- | --- | --- | --- |
-| `237feed` `v2611f845`→`v26113ec4` | 29 | 2255 | 345 |
-| `237feed-app` `v2.3.0`→`v2.3.1` | 50 | 7442 | 3835 (`package-lock.json`) |
+| Subject A, a build-tag range | 29 | 2255 | 345 |
+| Subject B, a release range | 50 | 7442 | 3835 (a generated lockfile) |
 
 A 400-line per-file cap captures essentially all genuine source changes in both ranges while
 containing the generated lockfile. The per-file and total caps are separate precisely because one
@@ -131,7 +131,7 @@ Under endpoint comparison, work done only on `base` after the fork appears as a 
 - **A backwards range had to become an error** (`BackwardsRange`). If `target` is an ancestor of
   `base`, the merge base *is* `target`, so the diff is empty — "no changes" in answer to reversed
   arguments. That is the confidently-wrong-empty-report failure, so it is refused with a message
-  naming the fix. This fired immediately on real data: a `237feed` build-tag pair supplied in the
+  naming the fix. This fired immediately on real data: a Subject A build-tag pair supplied in the
   wrong order was caught rather than reported as unchanged.
 - `git log A..B` already has merge-base semantics for commit listing, so commit enumeration in
   CON-06 will agree with this without special handling. Note the asymmetry: `A...B` means
@@ -141,7 +141,7 @@ Under endpoint comparison, work done only on `base` after the fork appears as a 
 **Evidence, stated precisely.** The semantics provably differ — a constructed test
 (`test_endpoint_diff_would_have_differed`) shows the endpoint diff reporting a base-only file as a
 deletion while the merge-base diff excludes it. On real data the difference has **not yet been
-observed to change a report**: `237feed-app`'s `v2.3.0` and `v2.3.1` are on divergent lines (the
+observed to change a report**: two adjacent Subject B release tags are on divergent lines (the
 merge base is neither tag), yet both semantics yield identical results — 50 changed files with one
 deletion either way. The decision rests on correctness of the question being asked, not on an
 observed discrepancy in this repository.
@@ -186,9 +186,9 @@ and both the symbolic name and the full 40-character SHA are retained.
 `^{commit}` yields the tag object's SHA, which would corrupt every later diff and every piece of
 evidence anchored to it.
 
-This is a bug the real subject repositories **cannot** catch: `237feed` and `237feed-app` both use
-lightweight tags, where `rev-parse v2.0.0` and `rev-parse v2.0.0^{commit}` return the same SHA
-(verified 2026-11-08). The test fixture therefore creates one annotated and one lightweight tag on
+This is a bug the real subject repositories **cannot** catch: Subjects A and B both use lightweight
+tags, where `rev-parse <tag>` and `rev-parse <tag>^{commit}` return the same SHA (verified
+2026-11-08). The test fixture therefore creates one annotated and one lightweight tag on
 purpose, and asserts the two SHAs differ before asserting which one is used.
 
 **Consequences.**
@@ -430,7 +430,7 @@ matters most.
   since baseline v4."*
 - **Noise suppression is required, not optional.** Rename-following (`--follow`) and
   whitespace-insensitive comparison (`-w`) must be in from the start. Against a repository with
-  237feed's commit volume, drift without these flags fires on everything and the feature becomes
+  Subject A's commit volume, drift without these flags fires on everything and the feature becomes
   noise.
 - **Known weakness, must be documented at Session 20:** a business rule changed in a file the
   baseline never cited produces *no* drift signal. Constat under-reports rather than over-reports.
@@ -493,11 +493,11 @@ rule-bearing evidence and must return `unknown` elsewhere.
 
 In the chosen sample repository (D-009) that spine exists and is strong:
 
-| Signal | Location in 237feed | Why it is rule-bearing |
+| Signal | Where it lives in Subject A | Why it is rule-bearing |
 | --- | --- | --- |
-| Liquibase migrations | `backend/src/main/resources/db/NNNN_*/changelog.yml` (74 tracked, ordered, named) | A schema/data migration is almost always a rule or constraint change, and the directory name states the intent. |
+| Liquibase migrations | numbered changelog directories in the backend module (74 tracked, ordered, named) | A schema/data migration is almost always a rule or constraint change, and the directory name states the intent. |
 | Feature flags | config registered as flags per the project's own ADR-0001 | A flag *is* a business rule toggle. |
-| Bean validation | `javax.validation` / hibernate-validator annotations in `models` | Declarative constraints: `@NotNull`, `@Size`, `@Pattern` are rules in machine-readable form. |
+| Bean validation | `javax.validation` / hibernate-validator annotations in the model module | Declarative constraints: `@NotNull`, `@Size`, `@Pattern` are rules in machine-readable form. |
 
 Classification (Session 08) targets these three first. Everything else is `unknown` until a human
 says otherwise. This is a narrower and more defensible MVP than "explain the diff".
@@ -506,11 +506,19 @@ says otherwise. This is a narrower and more defensible MVP than "explain the dif
 
 ---
 
-## D-009 · 2026-11-08 · Sample subject is the local 237feed repository family
+## D-009 · 2026-11-08 · Sample subjects are two private repositories, aliased A and B
 
-**Decision.** The primary test subjects are the local `237feed` repositories, principally
-`237feed` (Java/Gradle backend: `api`, `backend`, `commons`, `models` — 1130 commits, 777 tags) and
-`237feed-app` (444 commits, 11 tags). The Session 19 cross-repo scenario uses this pair.
+**Decision.** The primary test subjects are two private repositories belonging to the author,
+referred to throughout as:
+
+| Alias | What it is | Scale | Tagging |
+| --- | --- | --- | --- |
+| **Subject A** | Java/Gradle backend, four modules | 1130 commits, 777 tags | machine-generated build tags, one per build |
+| **Subject B** | Mobile application | 444 commits, 11 tags | semver release tags |
+
+The Session 19 cross-repo scenario uses this pair. They are **private**, so they are named only in
+a gitignored `SUBJECTS.local.md`; this public repository carries the measurements and properties
+the decisions rest on, but not the identities.
 
 **Context.** Resolves open question Q8. The roadmap asks for a small project we own and can safely
 analyse. These are owned, local, actively developed, and — critically — the owner knows them well
@@ -519,18 +527,18 @@ requires.
 
 **Consequences.**
 
-- **The two repos version incompatibly.** `237feed` uses machine-generated build tags
-  (`v26113ec4` — date plus hash, one per build); `237feed-app` uses semver release tags (`v2.3.1`).
+- **The two repos version incompatibly.** Subject A uses machine-generated build tags (date plus
+  hash, one per build); Subject B uses semver release tags.
   There is no shared version space. This is a gift rather than a problem: it forces product rule 6
   ("release streams are distinct") to be honoured from the start instead of being discovered late.
 - **Constat must distinguish release tags from build tags** or drown in 777 of them. Tag selection
   needs to be a deliberate feature, not an afterthought — revisit at Session 04 (revision
   resolution).
-- `237feed` carries an ADR log at `docs/adr/`. That is a real, in-repo source for the
+- Subject A carries an in-repo architecture decision log. That is a real source for the
   `requirement_ref` provenance type, which anchors Session 18 traceability in something that already
   exists rather than something hypothetical.
-- Analysis must respect `.gitignore`: `api/build/` and `backend/build/` contain generated artefacts
-  and are correctly untracked. Evidence collection reads tracked files only.
+- Analysis must respect `.gitignore`: Subject A's build-output directories contain generated
+  artefacts and are correctly untracked. Evidence collection reads tracked files only.
 
 **Status.** accepted
 
@@ -671,7 +679,7 @@ a milestone, not an afterthought.
   **not yet actually registered**. Do this before it is discussed publicly.
 - **Unit of a change proposal** (spec Q1) — has a working assumption (one proposal per
   `(repository, base_rev, target_rev)`) but no ratifying decision. Needed by Session 07.
-- **Release tag vs build tag discrimination** — surfaced by D-009: `237feed` carries 777
+- **Release tag vs build tag discrimination** — surfaced by D-009: Subject A carries 777
   machine-generated build tags. Revision resolution must not treat them as release points. Needed
   by Session 04.
 - **Copyright holder: individual or company** — see D-011 consequences.

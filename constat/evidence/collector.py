@@ -51,10 +51,10 @@ class ExcerptLimits:
     Defaults were measured rather than invented, against the two subject
     repositories on 2026-11-08:
 
-    * `237feed` `v2611f845`→`v26113ec4`: 29 files, 2255 diff lines, largest
-      file 345 lines. Fits entirely within these limits.
-    * `237feed-app` `v2.3.0`→`v2.3.1`: 50 files, 7442 diff lines — of which
-      `package-lock.json` alone is 2255. A generated lockfile consuming 30% of
+    * Subject A, a build-tag range: 29 files, 2255 diff lines, largest file
+      345 lines. Fits entirely within these limits.
+    * Subject B, a release range: 50 files, 7442 diff lines — of which a
+      generated lockfile alone is 3835. A lockfile consuming half of
       the budget while saying nothing about business rules (D-010) is exactly
       the "diffs become too large or noisy" risk, and is the reason the
       per-file cap exists separately from the total.
@@ -376,8 +376,8 @@ def collect_evidence(
     # Phase 1: read every diff before allocating any budget. Spending it
     # first-come would let alphabetical order decide which evidence a reviewer
     # sees — a generated lockfile early in the sort could starve a genuine
-    # business-rule change later in it. Measured on 237feed-app: package-lock
-    # .json is 3835 of 7442 diff lines in a single range.
+    # business-rule change later in it. Measured on Subject B: a generated
+    # lockfile is 3835 of 7442 diff lines in a single range.
     raw_diffs: dict[str, str] = {}
     for change in summary.changes:
         if change.path in binary:

@@ -203,8 +203,8 @@ class TestBounding:
 
         First-come spending let a file that happens to sort early consume the
         budget and starve later ones — so which evidence a reviewer saw would
-        depend on alphabetisation. Observed on 237feed-app, where
-        package-lock.json is 3835 of 7442 diff lines in one range.
+        depend on alphabetisation. Observed on Subject B, where a generated
+        lockfile is 3835 of 7442 diff lines in one range.
         """
         for name in ("a.txt", "b.txt", "c.txt"):
             commit_file(repo, name, "".join(f"{name} {n}\n" for n in range(100)), f"Add {name}")
@@ -227,7 +227,8 @@ class TestBounding:
     def test_a_small_file_is_captured_whole_despite_a_huge_sibling(self, repo: Path):
         """The lockfile case: a large generated file must not crowd out a
         small, potentially business-relevant one."""
-        commit_file(repo, "lockfile.json", "".join(f"dep {n}\n" for n in range(2000)), "Add lockfile")
+        bulk = "".join(f"dep {n}\n" for n in range(2000))
+        commit_file(repo, "lockfile.json", bulk, "Add lockfile")
         commit_file(repo, "rule.java", "if (amount > limit) reject();\n", "Add a rule")
 
         _, _, bundle = evidence_for(

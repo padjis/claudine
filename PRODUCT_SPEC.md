@@ -210,7 +210,7 @@ Recorded rather than guessed at. Each needs a decision before the session that d
 | Q5 | Where do reviewer edits live — the Markdown report, a structured editor, or both? | Session 12 | Structured proposal is the system of record; Markdown is a rendered view. Review edits the structure. |
 | Q6 | Who is the reviewer identity in a solo-founder MVP, and is it trusted input? | Session 12 | Reviewer identity comes from explicit CLI input / config, recorded as asserted (not authenticated). |
 | Q7 | How are diff excerpts bounded without losing the evidence a reviewer needs? | Session 06 | Per-file and per-proposal byte/line caps, plus a stored pointer (`rev:path:line-range`) so the full original is always re-derivable from Git. |
-| ~~Q8~~ | ~~Which sample repository is the primary test subject?~~ | Session 19 | **Resolved → D-009.** Local `237feed` + `237feed-app`. |
+| ~~Q8~~ | ~~Which sample repository is the primary test subject?~~ | Session 19 | **Resolved → D-009.** Two private repositories, aliased Subject A and Subject B. |
 | Q9 | Is the report format stable enough to version, and do we promise compatibility? | Session 09 | Report schema is versioned from the start (`schema_version`); no compatibility promise before the MVP ships. |
 | ~~Q10~~ | ~~What licence does this project use?~~ | Public release | **Resolved → D-011.** Apache-2.0, with a DCO sign-off on all contributions. |
 

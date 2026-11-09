@@ -35,8 +35,8 @@ class AnalysisRequest:
     already-approved range mean something it does not.
 
     Revisions are meaningful only within ``repo``. Two repositories need not
-    share a version space — ``237feed`` uses generated build tags while
-    ``237feed-app`` uses semver (D-009) — so an analysis spanning repositories
+    share a version space — one subject repository uses generated build tags
+    while the other uses semver (D-009) — so an analysis spanning repositories
     is several of these requests, never one request with a shared range.
     """
 

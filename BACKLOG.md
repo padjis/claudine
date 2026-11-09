@@ -113,7 +113,7 @@ could pick a build tag. The problem arrives only when something auto-selects —
 "default branch", "since last release".
 
 So the obligation at this stage was *negative*: do not add that convenience. The adapter module
-says so explicitly, and `237feed`'s 777 build tags and `237feed-app`'s 11 semver tags both resolve
+says so explicitly, and Subject A's 777 build tags and Subject B's 11 semver tags both resolve
 correctly because the caller names them.
 
 The tag classification question moves to whichever ticket first wants to auto-select. It is not
@@ -134,7 +134,7 @@ abandoned, just not yet real.
 ### CON-06 — done; the budget had an ordering bug worth remembering
 
 Bounding evidence turned out to be the easy half. The hard half was *who gets the budget*: spending
-it first-come let `package-lock.json` take 400 of 4000 lines and starve every file later in the
+it first-come let a generated lockfile take 400 of 4000 lines and starve every file later in the
 alphabet. Evidence selection depending on filename ordering is not a performance detail, it is a
 correctness problem for a governance tool (D-024).
 
@@ -166,8 +166,8 @@ paths with no `ChangeType` at all (D-022).
 ### CON-19 — the differentiator, demonstrated late
 
 Cross-repository value is the actual product thesis but is only shown here, at ticket 19 of 20
-(D-001). Treat it as a milestone rather than a trailing task. Uses `237feed` and `237feed-app`,
-whose incompatible version schemes force product rule 6 to be honoured properly.
+(D-001). Treat it as a milestone rather than a trailing task. Uses Subjects A and B, whose
+incompatible version schemes force product rule 6 to be honoured properly.
 
 ### CON-29 — a third selector shape, and the cross-repo mechanism
 
@@ -193,7 +193,7 @@ selection is a range, a state, or a commit set.
 step (CON-12); two meanings of *review* in one CLI is precisely the conflation this product cannot
 afford.
 
-**Measured on `237feed`, 2026-11-08, across all 1130 commits:**
+**Measured on Subject A, 2026-11-08, across all 1130 commits:**
 
 | Pattern | Count |
 | --- | --- |
@@ -212,7 +212,7 @@ Roughly **5% of commits carry any reference**, in four coexisting schemes. Two h
    a precision tool for well-tracked work, not a replacement for range selection. A report built
    from it must say what fraction of the range it accounts for, or it will quietly under-report.
 
-The three `237feed-ai#616/#617` references are real cross-repo links already present in history,
+The three `repo#issue` references are real cross-repository links already present in history,
 which gives CON-19 genuine evidence to work from rather than a simulated link.
 
 ### CON-26 — the one most likely to slip

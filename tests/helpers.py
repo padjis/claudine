@@ -1,8 +1,8 @@
 """Helpers for building throwaway repositories in tests.
 
 Kept out of conftest.py so they can be imported explicitly rather than arriving
-as fixtures. Tests must not depend on `237feed` being present, or on anything
-about the machine running them.
+as fixtures. Tests must not depend on the real subject repositories being
+present, or on anything about the machine running them.
 """
 
 from __future__ import annotations

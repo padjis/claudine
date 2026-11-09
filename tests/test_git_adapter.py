@@ -139,8 +139,8 @@ class TestResolveRevision:
 
         An annotated tag names a tag object. Resolving to that object instead of
         the commit it points at would corrupt every later diff, and neither
-        237feed nor 237feed-app would reveal it: both use lightweight tags,
-        where the two SHAs coincide.
+        subject repository would reveal it: both use lightweight tags, where
+        the two SHAs coincide.
         """
         found = discover_repository(repo)
         revision = resolve_revision(found, "v2.0.0")

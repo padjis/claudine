@@ -41,14 +41,14 @@ content the truncated excerpt does not contain — traceability proven rather th
 
 ### Verified against real repositories
 
-- `237feed` `v2611f845`→`v26113ec4`: 7 commits, 29 files, 2223 lines captured, 1 file truncated.
-- `237feed-app` `v2.3.0`→`v2.3.1`: 18 commits, 50 files, **49 captured whole**; only
-  `package-lock.json` truncated, at 393 of 3835 lines.
+- Subject A, a build-tag range: 7 commits, 29 files, 2223 lines captured, 1 file truncated.
+- Subject B, a release range: 18 commits, 50 files, **49 captured whole**; only a generated
+  lockfile truncated, at 393 of 3835 lines.
 
 ### A bug caught before shipping
 
 The first implementation spent the excerpt budget first-come down the sorted file list. On the real
-`237feed-app` range that meant `package-lock.json` took 400 of 4000 lines and files later in the
+Subject B range that meant a generated lockfile took 400 of 4000 lines and files later in the
 alphabet got **nothing** — evidence selection determined by filename ordering. Fixed by allocating
 fairly before keeping any text (D-024); the real range went from starving later files to capturing
 49 of 50 whole.
@@ -79,11 +79,11 @@ read-only guarantees are all covered.
 
 ### Verified against real repositories
 
-- `237feed` `v2611f845` → `v26113ec4`: 29 changed files, base is an ancestor of target.
-- `237feed-app` `v2.3.0` → `v2.3.1`: 50 changed files, and the two tags have **diverged** — the
-  merge base is neither tag.
-- `237feed` `snapshot --rev main`: 628 files present.
-- **The `BackwardsRange` guard fired on real data.** A `237feed` build-tag pair supplied in the
+- Subject A, a build-tag range: 29 changed files, base is an ancestor of target.
+- Subject B, a release range: 50 changed files, and the two tags have **diverged** — the merge
+  base is neither tag.
+- Subject A, `snapshot --rev main`: 628 files present.
+- **The `BackwardsRange` guard fired on real data.** A Subject A build-tag pair supplied in the
   wrong order was refused. Without it the output would have read "No file changes in this range",
   which is the confidently-wrong-empty-report failure this product exists to avoid.
 
@@ -91,7 +91,7 @@ read-only guarantees are all covered.
 
 The two diff semantics provably differ — a constructed test shows the endpoint diff reporting a
 base-only file as a deletion. But on real data the difference has **not** yet been observed to
-change a report: for `237feed-app` `v2.3.0`→`v2.3.1`, despite genuine divergence, both semantics
+change a report: for a Subject B release range, despite genuine divergence, both semantics
 give identical results (50 files, 1 deletion). D-021 rests on asking the right question, not on an
 observed discrepancy here.
 
@@ -104,7 +104,7 @@ observed discrepancy here.
 | `resolve_revision()` — symbolic name + full SHA retained (D-019) | ✅ |
 | Distinct error types, separate from `InvalidInput` | ✅ `RepositoryError` and five subtypes |
 | Repository failures exit **3**, malformed input still exits 2 | ✅ |
-| Throwaway-repository fixtures; no dependency on `237feed` | ✅ `tests/conftest.py`, `tests/helpers.py` |
+| Throwaway-repository fixtures; no dependency on the real subjects | ✅ `tests/conftest.py`, `tests/helpers.py` |
 | Annotated tags resolve to the commit, not the tag object (D-019) | ✅ |
 | Ambiguous revisions refused rather than guessed (D-020) | ✅ |
 | Bare repositories, detached HEAD, unborn HEAD, subdirectories | ✅ |
@@ -117,7 +117,7 @@ observed discrepancy here.
 ```
 
 38 new tests. Verified against both real repositories, including their incompatible tag schemes:
-`237feed` build tags (`v26113ec4`) and `237feed-app` semver (`v2.3.1`) both resolve.
+Subject A's build tags and Subject B's semver tags both resolve.
 
 ### Correction to an earlier claim
 
@@ -157,12 +157,12 @@ code with an unhelpful message would be a failure.
 ### Verified by hand
 
 ```
-$ constat snapshot --repo ~/git/237feed --rev main        → input accepted, nothing read
-$ constat analyse --repo ~/git/237feed \
-    --base v26113ec4 --target v2611f845                   → input accepted, nothing read
-$ constat analyse --base a --target b                     → error: --repo required  (exit 2)
-$ constat analyse --repo ~/git/237feed \
-    --base main --target main                             → error: nothing to compare (exit 2)
+$ constat snapshot --repo <subject-a> --rev main   → input accepted, nothing read
+$ constat analyse --repo <subject-a> \
+    --base <tag-1> --target <tag-2>                → input accepted, nothing read
+$ constat analyse --base a --target b              → error: --repo required  (exit 2)
+$ constat analyse --repo <subject-a> \
+    --base main --target main                      → error: nothing to compare (exit 2)
 ```
 
 ---
@@ -241,8 +241,8 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 - **Reports must keep state and change distinct** (D-016). A snapshot asserts "this is how it
   behaves"; an analysis asserts "this is what moved". Session 09 must not collapse them into one
   renderer.
-- **Tag selection is deferred, not solved.** `237feed` has 777 build tags (`v26113ec4`) against
-  `237feed-app`'s 11 semver tags. This only matters once something *auto-selects* a revision; today
+- **Tag selection is deferred, not solved.** Subject A has 777 build tags against Subject B's 11
+  semver tags. This only matters once something *auto-selects* a revision; today
   nothing does, because every option is required. Due at whichever ticket first adds "latest tag",
   "default branch" or "since last release".
 - **Copyright holder** recorded as an individual in `LICENSE`/`NOTICE`; change before accepting any
@@ -339,7 +339,7 @@ legal and validation work (`CON-21` onwards) and the per-ticket design notes.
 | 1 | Create an empty Git repository named `constat`. | ✅ |
 | 2 | Add the project charter, product specification and working agreement. | ✅ |
 | 3 | Have Claude Code review the documents, identify ambiguities and propose a small architecture. **Do not implement.** | ✅ 10 ambiguities recorded in `PRODUCT_SPEC.md` § 11; architecture proposed in `ARCHITECTURE.md` |
-| 4 | Choose the first sample Git repository. Prefer a small project you own and can safely analyse. | ✅ local `237feed` + `237feed-app` — D-009 |
+| 4 | Choose the first sample Git repository. Prefer a small project you own and can safely analyse. | ✅ Subjects A and B — D-009 |
 | 5 | Agree on the first CLI command and its acceptance criteria. | ⬜ **next decision needed** |
 | 6 | Implement the CLI skeleton and tests. | ✅ Session 02 |
 | 7 | Review the result, update project status, conduct the first two discovery conversations. | ⬜ |

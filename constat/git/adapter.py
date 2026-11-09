@@ -6,10 +6,10 @@ repository, never mutates a working tree, and never takes a lock
 (PRODUCT_SPEC.md rule 7).
 
 Deliberately absent: anything that *chooses* a revision for the user. No
-"latest tag", no default branch guess. `237feed` carries 777 generated build
-tags against `237feed-app`'s 11 release tags (D-009), so any convenience that
-picked a revision would pick the wrong one on at least one of them. Revisions
-are always named by the caller.
+"latest tag", no default branch guess. One subject repository carries 777
+generated build tags while the other uses 11 semver release tags (D-009), so any
+convenience that picked a revision would pick the wrong one on at least one of
+them. Revisions are always named by the caller.
 """
 
 from __future__ import annotations

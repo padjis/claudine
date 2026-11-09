@@ -87,12 +87,12 @@ class TestAnalysisRequest:
         assert request.repo == Path("/no/such/path/anywhere")
 
     def test_incompatible_tag_schemes_are_both_accepted(self):
-        """237feed uses build tags, 237feed-app uses semver (D-009).
+        """Subject A uses build tags, Subject B uses semver (D-009).
 
         Validation must not assume a shared version space.
         """
-        build_request("/tmp/237feed", "v26113ec4", "v2611f845")
-        build_request("/tmp/237feed-app", "v2.3.0", "v2.3.1")
+        build_request("/tmp/subject-a", "v2601abcd", "v2601ef01")
+        build_request("/tmp/subject-b", "v2.3.0", "v2.3.1")
 
 
 class TestSnapshotRequest:

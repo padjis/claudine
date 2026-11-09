@@ -6,7 +6,11 @@
 *.key
 secrets/
 
-# Claudine local state
+# Private notes. SUBJECTS.local.md maps the Subject A / Subject B aliases used
+# in DECISIONS.md to the real private repositories (D-009). Never commit it.
+*.local.md
+
+# Constat local state
 *.sqlite
 *.sqlite3
 *.db

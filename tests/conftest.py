@@ -1,8 +1,8 @@
 """Shared fixtures.
 
 Repositories are built from scratch in a temporary directory. Tests must not
-depend on `237feed` being present, or on anything about the machine running
-them. The git helpers live in helpers.py.
+depend on the real subject repositories being present, or on anything about
+the machine running them. The git helpers live in helpers.py.
 """
 
 from __future__ import annotations
