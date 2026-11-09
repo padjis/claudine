@@ -158,6 +158,33 @@ def _current_branch(path: Path) -> str | None:
     return result.stdout.strip() or None
 
 
+def root_commits(repo: Repository, revision: Revision) -> tuple[str, ...]:
+    """The parentless commits in `revision`'s history, sorted.
+
+    Used as the repository's durable identity (D-025). A filesystem path
+    changes when a clone moves and a remote URL changes when a project
+    migrates host; the root commit does not. Sorting makes the choice
+    deterministic when a repository has several roots, which happens with
+    orphan branches or grafted histories.
+    """
+    result = run_git(
+        ["rev-list", "--max-parents=0", revision.sha], cwd=repo.root
+    )
+    if result.returncode != 0:
+        raise GitCommandFailed(
+            f"could not find the root commit(s) for {revision.symbolic} in "
+            f"{repo.root}: {result.stderr.strip()}"
+        )
+
+    roots = tuple(sorted(line.strip() for line in result.stdout.split() if line.strip()))
+    if not roots:
+        raise GitCommandFailed(
+            f"{revision.symbolic} in {repo.root} has no root commit, which "
+            "should be impossible for a resolved revision."
+        )
+    return roots
+
+
 def resolve_revision(repo: Repository, symbolic: str) -> Revision:
     """Resolve a symbolic revision to a commit SHA within `repo`.
 

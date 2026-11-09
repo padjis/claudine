@@ -203,7 +203,7 @@ Recorded rather than guessed at. Each needs a decision before the session that d
 
 | # | Question | Blocks | Current working assumption |
 | --- | --- | --- | --- |
-| Q1 | What is the unit of a proposal — one revision range, one PR, or one business capability? | Session 07 (data model) | **Widened by D-016**, still open: one proposal per `(repository, revision_range)`, where a range is closed (`base`→`target`) or open (single revision). Capability grouping deferred to post-MVP; a cross-repository analysis is several proposals in a group, never one proposal with a shared range. |
+| ~~Q1~~ | ~~What is the unit of a proposal?~~ | Session 07 | **Resolved → D-025.** `(repository, selection)`, where a selection is a closed range, an open range, or a reserved commit set. Identity generated per run; `selection_key` derived. Cross-repository work is a group of proposals. |
 | ~~Q2~~ | ~~Does "behaviour change" mean externally observable behaviour or any code change?~~ | Session 08 | **Resolved → D-010.** Business rule change. |
 | Q3 | What exactly makes a baseline "immutable" — append-only rows, content hashing, or a signed chain? | Session 14 | Append-only versioned rows plus a content hash per baseline version. No cryptographic signing in the MVP. |
 | ~~Q4~~ | ~~How is "documentation drift" defined and detected?~~ | Session 15 | **Resolved → D-012.** Per-claim evidence staleness: `current` / `unverified` / `orphaned`. A signal, never a verdict. |
@@ -214,4 +214,5 @@ Recorded rather than guessed at. Each needs a decision before the session that d
 | Q9 | Is the report format stable enough to version, and do we promise compatibility? | Session 09 | Report schema is versioned from the start (`schema_version`); no compatibility promise before the MVP ships. |
 | ~~Q10~~ | ~~What licence does this project use?~~ | Public release | **Resolved → D-011.** Apache-2.0, with a DCO sign-off on all contributions. |
 
-Resolved questions move to [DECISIONS.md](DECISIONS.md).
+All ten questions raised in Session 01 are now resolved. Resolved questions move to
+[DECISIONS.md](DECISIONS.md); new ones are raised as `CON-` tickets in [BACKLOG.md](BACKLOG.md).

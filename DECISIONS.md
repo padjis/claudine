@@ -8,6 +8,94 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-026 · 2026-11-09 · Pydantic bounds the published schema; internals stay dataclasses
+
+**Decision.** Pydantic becomes the project's first runtime dependency, applied **only** to the
+models that are persisted, serialised or reported — those in `constat/models.py`. The Git adapter,
+diff and evidence types stay frozen dataclasses, with an explicit mapping layer between them.
+
+**Context.** D-002 chose Pydantic; D-015 deferred it until there was something to validate. There
+now is. The open question was how far it should reach, and the worst outcome would have been
+ending up with two conventions by accident rather than by choice.
+
+The boundary follows the layering in ARCHITECTURE.md section 2. The Git layer is deterministic
+plumbing over `subprocess` whose "validation" is whether Git succeeded; schema enforcement there
+would be ceremony. The proposal is the opposite: it is the stable contract that gets written to
+SQLite (CON-13), rendered (CON-09) and frozen into baselines (CON-14), and a malformed one is a
+governance failure rather than a bug.
+
+**Consequences.**
+
+- `pip install constat` now pulls one package. The security-review surface argument in D-015 still
+  holds: one well-known dependency, and the deterministic evidence path remains free of any AI
+  provider (D-003).
+- A mapping layer is required, and is where the two worlds meet. It is deliberately one-directional:
+  adapters build models, models never reach back into Git.
+- `schema_version` lives on the proposal (D-008) and is asserted in tests, so a future format change
+  cannot go unnoticed.
+- Rejecting Pydantic in the Git layer means `Repository`, `Revision`, `ChangeSummary`,
+  `EvidenceBundle` and friends stay dependency-free and trivially constructible in tests — which is
+  why the existing 143 tests needed no changes.
+
+**Status.** accepted
+
+---
+
+## D-025 · 2026-11-09 · The unit of a proposal, and how one is identified
+
+**Decision.** Closes Q1 and CON-24, the last of the original ten open questions.
+
+A proposal is **`(repository, selection)`**, where a selection is one of:
+
+| Kind | Question | Status |
+| --- | --- | --- |
+| `change` | What changed between two revisions? | implemented (CON-05) |
+| `state` | What does this revision contain now? | implemented (CON-05) |
+| `commit_set` | What changed for this reference? | reserved for CON-29 |
+
+**A proposal belongs to exactly one repository.** Cross-repository work is a *group* referencing
+several proposals, never one proposal spanning repositories. Forced by D-009: the two subjects have
+no shared version space, so a single range cannot be meaningful in both. This also satisfies
+product rule 6 structurally rather than by convention.
+
+**Identity is generated, not derived.** Each run produces a new proposal with a fresh UUID, and
+additionally carries a deterministic `selection_key` — a hash of the repository identity, the
+selection kind and the resolved SHAs.
+
+**Context.** The tempting choice is a derived identity: hash the inputs, so re-analysing a range
+yields "the same" proposal. It breaks on the governance model. An approved baseline and a later
+re-analysis of the same range are *different things* — one is a human decision, the other a fresh
+machine output — and giving them one identity would force the re-analysis either to collide with
+the approved record or to silently overwrite it. History must be durable (product rule 5), which
+means append-only, which means new identity per run.
+
+The `selection_key` recovers what derivation was for: "show me every proposal for this range" and
+"has this been documented before?" remain single lookups. Append-only history and idempotent lookup
+are not actually in tension; they just need two fields rather than one.
+
+**Repository identity is the root commit, not the path.** A filesystem path changes when a clone
+moves, and a remote URL changes when a project migrates host — this project changed both its name
+and its forge inside two days. The SHA of the earliest root commit does not. Where a repository has
+several root commits (orphan branches), all are recorded and the lexicographically smallest is used
+as the key, so the choice is deterministic.
+
+**Consequences.**
+
+- CON-13 gets its stable identifier, and CON-14's baselines can reference a proposal UUID that will
+  never be reused.
+- CON-15 compares against the last approved baseline *for the same `selection_key`*, which is what
+  "since the last approved state" has to mean.
+- Re-running `analyse` ten times produces ten proposals. That is correct but needs surfacing in the
+  UI eventually, or the store fills with near-duplicates; worth a ticket when CON-13 lands.
+- Computing repository identity costs one extra `git rev-list --max-parents=0` per run. Cheap, and
+  it buys identity that survives moving, renaming and re-cloning.
+- `commit_set` is reserved in the schema now so adding CON-29 later is additive rather than a
+  schema break.
+
+**Status.** accepted
+
+---
+
 ## D-024 · 2026-11-09 · Excerpt budget is shared fairly, not spent first-come
 
 **Decision.** The total line budget is allocated across changed files *before* any text is kept,

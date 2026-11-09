@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-09
 **Current phase:** Phase 2 — Evidence engine
-**Current session:** 06 — Collect inspectable evidence
+**Current session:** 07 — Define the change data model
 
 ---
 
@@ -11,9 +11,48 @@
 The repository is public at `https://github.com/padjis/constat`. Session 01 was committed and
 pushed as `b092b62`.
 
-`analyse` reports file changes, the commits behind them, and bounded diff excerpts that each record
-the command regenerating them in full. `snapshot` reports the file inventory and commit metadata.
-Nothing is classified and no report is rendered — Sessions 08 and 09.
+Both commands now emit a validated, versioned `Proposal` — available as JSON via `--json`. Nothing
+is classified and no Markdown report is rendered yet: Sessions 08 and 09.
+
+**Q1 is closed.** All ten original open questions from Session 01 are now resolved.
+
+### Session 07 — done when: *stable, tested structured output* ✅
+
+| Item | Status |
+| --- | --- |
+| `constat/models.py` — Pydantic schema, frozen, `extra="forbid"` | ✅ |
+| `constat/mapping.py` — one-directional adapter→model layer (D-026) | ✅ |
+| `schema_version` on every proposal (D-008) | ✅ asserted in tests |
+| Generated `proposal_id`, deterministic `selection_key` (D-025) | ✅ |
+| Repository identity from the root commit, not the path | ✅ survives move and re-clone |
+| Discriminated `change` / `state` selections; `commit_set` reserved | ✅ |
+| Full provenance taxonomy declared; evidence defaults to `observed_fact` | ✅ |
+| JSON round-trip, including the selection discriminator | ✅ |
+| `--json` on both commands | ✅ |
+| Pydantic added as the first runtime dependency, with a stated reason | ✅ D-026 |
+
+### Tests run
+
+```
+.venv/bin/python -m pytest  →  179 passed
+```
+
+36 new tests. The existing 143 needed **no changes**, which is the point of the D-026 boundary:
+the Git layer stayed dependency-free dataclasses.
+
+### Verified against a real repository
+
+Subject A, a build-tag range, via `--json`: schema_version 1, 7 commits, 29 changes, 29 evidence
+records all `observed_fact`, completeness 2223 captured / 32 omitted, and a repository identity
+derived from the root commit rather than the path.
+
+### The decision that actually mattered
+
+Not the models — **identity**. A derived proposal ID (hash the inputs) is the tempting choice and
+breaks the governance model: a fresh re-analysis would collide with an approved baseline for the
+same range. History must be append-only (product rule 5), so identity is generated per run, and a
+separate `selection_key` recovers the idempotent lookup derivation was wanted for. The two are not
+in tension; they just need two fields.
 
 ### Session 06 — done when: *evidence records can be traced back to Git* ✅
 
@@ -254,26 +293,32 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-**Session 07 — Define the change data model (CON-07).**
+**Session 08 — Classify changes conservatively (CON-08).**
 
-Typed models for revision range, repository, commit, file change, evidence item and proposal, with
-schema validation.
-**Done when:** stable, tested structured output.
+Initial categories: feature, bug fix, refactor, configuration, API/schema change, test-only.
+Uncertain cases marked `unknown`.
+**Done when:** classification never pretends to know business intent from a filename alone.
 
-**Blocked on CON-24 first.** The unit of a proposal is still open (Q1, widened by D-016). The data
-model cannot be settled while it is: a proposal keyed on `(repository, revision_range)` and one
-keyed on a commit set (CON-29) have different shapes. Settle CON-24, then build.
+This is the ticket where D-010 gets tested. "Business rule change" is the product's subject, and
+the deterministic spine for it is:
 
-Scope once unblocked:
+| Signal | Why it is rule-bearing |
+| --- | --- |
+| Numbered migration changelogs | A schema or data migration is almost always a rule change, and the directory name states intent. |
+| Feature flags | A flag *is* a business rule toggle. |
+| Bean-validation annotations | `@NotNull`, `@Size`, `@Pattern` are constraints in machine-readable form. |
 
-- Pydantic enters here, as planned in D-002 and deferred in D-015 — the first runtime dependency,
-  and the reason for it should be recorded.
-- `schema_version` on everything persisted (D-008).
-- The existing frozen dataclasses in `config.py`, `git/diff.py` and `evidence/collector.py` either
-  become Pydantic models or stay as internal types with a mapping layer. Pick one deliberately;
-  having both conventions by accident would be the worst outcome.
+Everything else returns `unknown`. The done-when is phrased as a prohibition, so the tests should
+be too: the strongest ones will assert what classification **refuses** to conclude.
 
-Explicitly **not** in Session 07: classification, reporting or persistence.
+Two things to settle while implementing it:
+
+- **Language coupling.** The three signals above are Java-shaped. Hard-coding them makes Constat a
+  Java tool. Decide whether detection is pluggable from the start or deliberately single-language
+  for the MVP, and record it either way.
+- **Where classification lives in the model.** A category is an inference, not an observed fact, so
+  it cannot be stored like one. It likely needs `provenance: assumption` and a pointer to whichever
+  evidence triggered it — which is CON-10's shape arriving early.
 
 ---
 

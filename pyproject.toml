@@ -19,9 +19,10 @@ classifiers = [
   "Topic :: Software Development :: Version Control :: Git",
 ]
 
-# Deliberately empty. The evidence path must not depend on an AI provider
-# (D-003), and no runtime dependency is added without a stated reason.
-dependencies = []
+# One dependency, with a stated reason (D-015, D-026): schema validation for
+# the models that are persisted, rendered and frozen into baselines. The
+# evidence path still depends on no AI provider (D-003).
+dependencies = ["pydantic>=2.7"]
 
 dynamic = ["version"]
 

@@ -14,6 +14,7 @@ from . import __version__
 from .config import build_request, build_snapshot_request
 from .errors import InvalidInput, RepositoryError
 from .evidence import collect_evidence, describe_commit
+from .mapping import change_proposal, commit_record, state_proposal
 from .git import (
     compare_revisions,
     discover_repository,
@@ -88,6 +89,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="REV",
         help="revision representing the new state to document",
     )
+    analyse.add_argument(
+        "--json",
+        action="store_true",
+        help="emit the structured proposal instead of the human summary",
+    )
 
     snapshot = subparsers.add_parser(
         "snapshot",
@@ -110,6 +116,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="REV",
         help="revision to describe, typically main or master (required; no default)",
     )
+    snapshot.add_argument(
+        "--json",
+        action="store_true",
+        help="emit the structured proposal instead of the human summary",
+    )
 
     return parser
 
@@ -127,9 +138,14 @@ def _run_analyse(args: argparse.Namespace) -> int:
         target = resolve_revision(repo, request.target)
         summary = compare_revisions(repo, base, target)
         bundle = collect_evidence(repo, summary)
+        proposal = change_proposal(repo, summary, bundle)
     except RepositoryError as exc:
         print(f"{PROG}: error: {exc}", file=sys.stderr)
         return EXIT_REPOSITORY
+
+    if args.json:
+        print(proposal.model_dump_json(indent=2))
+        return EXIT_OK
 
     _describe_repository(repo)
     print(f"base:       {base.symbolic} -> {base.sha}")
@@ -181,8 +197,12 @@ def _run_analyse(args: argparse.Namespace) -> int:
     # Says only what was established. Anything interpretive would be
     # unsupported certainty (PRODUCT_SPEC.md rule 1): nothing has been
     # classified and no report has been rendered.
+    print(f"proposal:   {proposal.proposal_id}")
+    print(f"selection:  {proposal.selection_key[:16]}…")
+    print()
     print("Evidence collected but not classified (CON-08) and not rendered as a")
     print("report (CON-09). Each excerpt records the command that regenerates it.")
+    print("Use --json for the structured proposal.")
     return EXIT_OK
 
 
@@ -198,9 +218,14 @@ def _run_snapshot(args: argparse.Namespace) -> int:
         revision = resolve_revision(repo, request.rev)
         state = summarise_state(repo, revision)
         commit = describe_commit(repo, revision)
+        proposal = state_proposal(repo, state, commit_record(commit))
     except RepositoryError as exc:
         print(f"{PROG}: error: {exc}", file=sys.stderr)
         return EXIT_REPOSITORY
+
+    if args.json:
+        print(proposal.model_dump_json(indent=2))
+        return EXIT_OK
 
     _describe_repository(repo)
     print(f"revision:   {revision.symbolic} -> {revision.sha}")

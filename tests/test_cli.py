@@ -256,3 +256,47 @@ def test_installed_console_script_runs():
     )
     assert result.returncode == 0
     assert constat.__version__ in result.stdout
+
+
+class TestJsonOutput:
+    def test_analyse_json_is_a_valid_proposal(self, repo, capsys):
+        from constat.models import Proposal
+
+        assert main(
+            ["analyse", "--repo", str(repo), "--base", "v1.0.0", "--target", "main", "--json"]
+        ) == 0
+
+        proposal = Proposal.model_validate_json(capsys.readouterr().out)
+        assert proposal.is_change is True
+        assert proposal.schema_version == 1
+
+    def test_snapshot_json_is_a_state_proposal(self, repo, capsys):
+        from constat.models import Proposal, SelectionKind
+
+        assert main(["snapshot", "--repo", str(repo), "--rev", "main", "--json"]) == 0
+
+        proposal = Proposal.model_validate_json(capsys.readouterr().out)
+        assert proposal.selection.kind is SelectionKind.STATE
+        assert proposal.changes == ()
+
+    def test_json_output_carries_no_prose(self, repo, capsys):
+        """Machine output must be parseable without stripping commentary."""
+        import json
+
+        main(["analyse", "--repo", str(repo), "--base", "v1.0.0", "--target", "main", "--json"])
+        json.loads(capsys.readouterr().out)  # raises if anything else was printed
+
+    def test_repeated_json_runs_differ_only_in_identity(self, repo, capsys):
+        """Append-only history, idempotent lookup (D-025)."""
+        from constat.models import Proposal
+
+        args = ["analyse", "--repo", str(repo), "--base", "v1.0.0", "--target", "main", "--json"]
+        main(args)
+        first = Proposal.model_validate_json(capsys.readouterr().out)
+        main(args)
+        second = Proposal.model_validate_json(capsys.readouterr().out)
+
+        assert first.proposal_id != second.proposal_id
+        assert first.selection_key == second.selection_key
+        assert first.changes == second.changes
+        assert first.evidence == second.evidence

@@ -45,14 +45,14 @@ Ticket register. The single source of truth for *what work exists*; the single s
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
 | CON-05 | Compare two revisions | A deterministic change summary for two revisions. | ✅ `6e3b07d` |
-| CON-06 | Collect inspectable evidence | Evidence records can be traced back to Git. | ✅ |
-| CON-07 | Define the change data model | Stable, tested structured output. | ⬜ next — blocked on CON-24 |
+| CON-06 | Collect inspectable evidence | Evidence records can be traced back to Git. | ✅ `eb957b6` |
+| CON-07 | Define the change data model | Stable, tested structured output. | ✅ |
 
 ## Phase 3 — Meaning and reporting
 
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
-| CON-08 | Classify changes conservatively | Classification never pretends to know business intent from a filename alone. | ⬜ |
+| CON-08 | Classify changes conservatively | Classification never pretends to know business intent from a filename alone. | ⬜ next |
 | CON-09 | Generate the first report | A developer can understand the report without reading raw command output. | ⬜ |
 | CON-10 | Separate facts from interpretation | Every claim has a provenance type; unsupported claims are visibly uncertain. | ⬜ |
 | CON-11 | Strengthen quality with tests | The report remains safe and useful across realistic Git cases. | ⬜ |
@@ -88,7 +88,7 @@ forces them.
 | CON-21 | Register `tryconstat.com` | The domain is owned. | 🔴 **not done** — chosen in D-014 and confirmed free, but unregistered and now named publicly. |
 | CON-22 | Trademark knockout search on "Constat" | USPTO and EUIPO searched in Nice classes 9 and 42, plus an INPI/RCS check. | ⬜ before the first pilot conversation |
 | CON-23 | Trademark attorney review | A finalist cleared, including the FR/EU descriptiveness question. | ⬜ before the first pilot conversation |
-| CON-24 | Ratify the proposal unit (Q1) | A `D-NNN` entry fixes the unit of a proposal. | ⬜ needed by CON-07; likely resolved by CON-29's shape |
+| CON-24 | Ratify the proposal unit (Q1) | A `D-NNN` entry fixes the unit of a proposal. | ✅ D-025 |
 | CON-25 | Decide the copyright holder | `LICENSE` and `NOTICE` name the intended holder. | ⬜ before accepting any outside contribution |
 | CON-26 | Hold 5–10 discovery conversations | Notes from 5–10 people who work across multiple repositories. | 🔴 **0 held** — the roadmap puts the first two on Day 7 |
 | CON-27 | Secure one design partner | A safe, non-sensitive sample repository from someone other than us. | ⬜ weeks 3–5 |
@@ -98,7 +98,8 @@ forces them.
 
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
-| CON-29 | Ticket-scoped documentation (`constat document <ref>`) | A proposal can be initialised from a reference found in commit messages, across one or more repositories. | ⬜ needs CON-04 and CON-05 first |
+| CON-29 | Ticket-scoped documentation (`constat document <ref>`) | A proposal can be initialised from a reference found in commit messages, across one or more repositories. | ⬜ unblocked; `commit_set` is reserved in the schema (D-025) |
+| CON-30 | Surface near-duplicate proposals | Re-analysing a range does not bury the store in near-identical proposals. | ⬜ needed once CON-13 persists them |
 
 ---
 
@@ -147,11 +148,19 @@ Also surfaced here and deferred deliberately:
 - **One `git diff` per file** rather than splitting a combined diff on `diff --git` boundaries.
   Slower, but a filename containing that string cannot corrupt the split.
 
-### CON-07 — blocked on CON-24
+### CON-07 — done; identity was the real question
 
-The data model cannot be settled while the unit of a proposal is open. D-016 widened it to
-`(repository, revision_range)` with the range either closed or open, but that is still a working
-position rather than a decision.
+The models were straightforward. The decision that mattered was **generated versus derived
+identity** (D-025), and it is not obvious until you ask what happens on a re-run: a derived
+identity would make a fresh re-analysis collide with an approved baseline for the same range.
+Append-only history (product rule 5) requires a new identity per run, and a separate
+`selection_key` recovers the idempotent lookup that derivation was wanted for.
+
+Repository identity is the **root commit**, not the path or the remote. This project changed both
+its name and its forge within two days of starting, which is as good an argument as any.
+
+**New ticket arising:** re-running `analyse` ten times produces ten proposals. Correct, but the
+store will fill with near-duplicates — needs surfacing once CON-13 lands. See CON-30.
 
 ### CON-09 — must not collapse state and change
 

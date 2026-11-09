@@ -3,7 +3,7 @@
 > Constat turns software changes into evidence-backed, human-approved knowledge about how a
 > product behaves.
 
-**Status: pre-MVP, 6 of 20 sessions done.** The CLI reads a local Git repository, resolves
+**Status: pre-MVP, 7 of 20 sessions done.** The CLI reads a local Git repository, resolves
 revisions, and reports file changes, commits and bounded diff evidence. It does **not** yet
 classify anything, produce a report, or support review and baselines — see
 [BACKLOG.md](BACKLOG.md) for what exists and what does not.
@@ -65,7 +65,8 @@ justifies them. See [ARCHITECTURE.md](ARCHITECTURE.md) § "After the MVP".
 
 ## Getting started
 
-Requires Python 3.11 or newer. There are **no runtime dependencies** (D-015).
+Requires Python 3.11 or newer. One runtime dependency, Pydantic, for schema validation of
+persisted records (D-026).
 
 ```bash
 python3 -m venv .venv
@@ -98,6 +99,11 @@ and 4000 per comparison (D-023). Every excerpt records its true size, any omissi
 for it, plus the exact `git` command that regenerates it in full — so bounding never makes Constat
 the only copy of the evidence. The budget is shared fairly across files rather than spent in path
 order, so a generated lockfile cannot starve a source file of its excerpt (D-024).
+
+Add `--json` to either command for the structured proposal: a versioned, validated record carrying
+the repository identity, the selection, commits, changes, evidence and a completeness statement.
+Each run produces a new proposal ID, with a stable `selection_key` identifying the range — so
+history stays append-only while lookup stays idempotent (D-025).
 
 Nothing is classified yet. Every option is required: there are no defaults for inputs this
 important, and `--repo` never falls back to the current directory.
