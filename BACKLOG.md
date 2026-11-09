@@ -99,6 +99,7 @@ forces them.
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
 | CON-29 | Ticket-scoped documentation (`constat document <ref>`) | A proposal can be initialised from a reference found in commit messages, across one or more repositories. | 🔁 **promoted** — now the primary workflow, delivered by CON-33/34 |
+| CON-39 | Regeneration must not destroy human edits | Re-running an operation preserves what a reviewer wrote. | ⬜ **blocks CON-12** |
 | CON-30 | ~~Surface near-duplicate proposals~~ | — | ❌ **withdrawn.** The problem was an artefact of proposal-per-run; D-029's one-document-per-ticket model does not have it. |
 
 ## Workspace model (D-027, D-028, D-029)
@@ -111,8 +112,8 @@ first seven sessions assumed. The Git and evidence layers are unaffected.
 | CON-31 | Workspace storage | A SQLite workspace persists across runs; schema versioned. | ✅ |
 | CON-32 | Repository registry | Repositories can be added, listed and removed; local paths and remote URLs both work. | ✅ local paths; remote URLs are CON-35 |
 | CON-33 | Tickets and documents | A ticket can be opened and owns exactly one living document. | ✅ |
-| CON-34 | Operations against the set | An operation gathers evidence for a ticket across every registered repository, measured against mainline, and expands the document. | ⬜ **next** |
-| CON-35 | Remote clone-and-cache | A remote URL is cloned into a local cache and read like any local repository; fetch time is recorded. | ⬜ |
+| CON-34 | Operations against the set | An operation gathers evidence for a ticket across every registered repository, measured against mainline, and expands the document. | ✅ |
+| CON-35 | Remote clone-and-cache | A remote URL is cloned into a local cache and read like any local repository; fetch time is recorded. | ⬜ **next** |
 | CON-36 | Default-branch resolution | Each repository's default branch is resolved and stored, never assumed to be `main`. | ✅ delivered with CON-32 |
 | CON-37 | Merged-ticket semantics | A ticket whose work is already merged still produces a document rather than an empty one. | ✅ resolved by D-030; implementation lands with CON-34 |
 | CON-38 | Cache staleness disclosure | Every document states when each repository's cache was last fetched. | ⬜ |
@@ -137,6 +138,22 @@ attributable to the ticket, resolved from a branch name encoding it, commit-mess
 an explicit list. The branch-name signal (`feat/622-…`) is the better one where it exists:
 unambiguous, and independent of commit-message discipline, which only ~5% of Subject A's commits
 exercise.
+
+### CON-34 — per-commit evidence, and the hazard it leaves
+
+A ticket's commits need not be contiguous, so there is no single revision range meaning "this
+ticket's effect". Diffing the first commit's parent against the last would attribute whatever else
+landed between them to the ticket. Evidence is therefore collected **per commit** (D-033), at the
+cost of duplicating a file touched more than once. A test builds the trap deliberately — ticket
+work, an unrelated commit, more ticket work — and asserts the unrelated file never appears.
+
+`ticket add` now fills the document itself. The earlier shape ran the same search, printed it and
+threw it away, leaving `operation` empty and the document blank: two implementations of one idea,
+one of which persisted nothing.
+
+**The hazard this leaves is CON-39.** The body is regenerated on every run, which is safe only
+while it is entirely machine-derived. The moment a reviewer can edit (CON-12), regeneration
+destroys their work. That must be solved before review ships, not after.
 
 ### CON-33 — no ticket title, and the first migration
 

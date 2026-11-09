@@ -427,15 +427,20 @@ class TestTicketCommands:
         main(["--workspace", target, "init"])
         return target
 
-    def test_add_creates_a_ticket_and_reports_the_search(self, tmp_path, capsys):
+    def test_add_opens_the_ticket_and_fills_its_document(self, tmp_path, capsys):
+        """Opening a ticket writes its document immediately; an empty one
+        would say nothing and require a second command to be useful."""
         ws = self._ws(tmp_path)
         capsys.readouterr()
 
         assert main(["--workspace", ws, "ticket", "add", "622"]) == 0
         out = capsys.readouterr().out
         assert "opened ticket: 622" in out
-        assert "document: created, empty" in out
-        assert "No repositories registered" in out
+        assert "Document written" in out
+
+        capsys.readouterr()
+        main(["--workspace", ws, "document", "622", "--show"])
+        assert "# Ticket 622" in capsys.readouterr().out
 
     def test_add_is_refused_twice(self, tmp_path, capsys):
         ws = self._ws(tmp_path)
@@ -454,7 +459,9 @@ class TestTicketCommands:
         assert "622" in capsys.readouterr().out
 
         assert main(["--workspace", ws, "ticket", "show", "622"]) == 0
-        assert "document: empty" in capsys.readouterr().out
+        shown = capsys.readouterr().out
+        assert "document:  filled" in shown
+        assert "operations:" in shown
 
     def test_show_an_unknown_ticket_exits_four(self, tmp_path, capsys):
         ws = self._ws(tmp_path)
@@ -478,9 +485,7 @@ class TestTicketCommands:
         capsys.readouterr()
 
         assert main(["--workspace", ws, "ticket", "add", "77"]) == 0
-        out = capsys.readouterr().out
-        assert "ahead of main" in out
-        assert "staged ahead of mainline" in out
+        assert "s: pending — 1 commit(s)" in capsys.readouterr().out
 
     def test_landed_work_is_distinguished_from_nothing(self, tmp_path, repo, capsys):
         ws = self._ws(tmp_path)
@@ -494,10 +499,57 @@ class TestTicketCommands:
         capsys.readouterr()
 
         main(["--workspace", ws, "ticket", "add", "88"])
-        landed = capsys.readouterr().out
-        assert "already in main" in landed
+        assert "s: landed" in capsys.readouterr().out
 
         main(["--workspace", ws, "ticket", "add", "99999"])
-        missing = capsys.readouterr().out
-        assert "no commits reference this ticket" in missing
-        assert "not that the ticket changed nothing" in missing
+        assert "s: not_found" in capsys.readouterr().out
+
+
+class TestDocumentCommand:
+    def _setup(self, tmp_path, with_repo=True):
+        ws = str(tmp_path / "ws")
+        main(["--workspace", ws, "init"])
+        if with_repo:
+            source = tmp_path / "src"
+            source.mkdir()
+            git(source, "init", "--initial-branch=main", "--quiet")
+            (source / "a.py").write_text("x = 1\n")
+            git(source, "add", "a.py")
+            git(source, "commit", "-m", "Initial")
+
+            clone = tmp_path / "clone"
+            git(tmp_path, "clone", "--quiet", str(source), str(clone))
+            git(clone, "checkout", "--quiet", "-b", "develop")
+            (clone / "a.py").write_text("x = 2\n")
+            git(clone, "add", "a.py")
+            git(clone, "commit", "-m", "Change the rule (#622)")
+            git(clone, "checkout", "--quiet", "main")
+            main(["--workspace", ws, "repo", "add", str(clone), "--name", "billing"])
+        main(["--workspace", ws, "ticket", "add", "622"])
+        return ws
+
+    def test_document_gathers_and_reports(self, tmp_path, capsys):
+        ws = self._setup(tmp_path)
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "document", "622"]) == 0
+        out = capsys.readouterr().out
+        assert "document updated" in out
+        assert "billing: pending" in out
+
+    def test_show_prints_the_document(self, tmp_path, capsys):
+        ws = self._setup(tmp_path)
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "document", "622", "--show"]) == 0
+        body = capsys.readouterr().out
+        assert "# Ticket 622" in body
+        assert "a.py" in body
+        assert "carries no authority" in body
+
+    def test_an_unknown_ticket_exits_four(self, tmp_path, capsys):
+        ws = self._setup(tmp_path, with_repo=False)
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "document", "nope"]) == 4
+        assert "no ticket" in capsys.readouterr().err

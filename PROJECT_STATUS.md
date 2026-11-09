@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-09
 **Current phase:** Phase 2 — Evidence engine
-**Current session:** CON-33 — tickets and documents
+**Current session:** CON-34 — operations against the set
 
 ---
 
@@ -293,25 +293,38 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-**CON-34 — operations against the set.** An operation gathers evidence for a ticket across every
-registered repository and expands the ticket's document.
-**Done when:** running an operation on a ticket produces a document containing evidence from each
-repository where its work was found.
+See the direction note below: the document's *content* is being redefined.
 
-Scope:
+## CON-34 — done when: *an operation produces a document with evidence from each repository* ✅
 
-- `constat document <ticket>` runs the operation across the registered set.
-- For each repository: resolve the ticket's commit set (D-030, D-031), collect evidence for those
-  commits with the existing collector, and append to the document.
-- Record the operation itself — what ran, against which repository, when, what it contributed.
-  Without that the document is unattributable prose.
-- The document must state which repositories were searched and found nothing, not only those that
-  matched. Silence about a repository is indistinguishable from "no changes there".
+| Item | Status |
+| --- | --- |
+| `constat document <ref>` gathers across the registered set | ✅ |
+| `ticket add` fills the document immediately (D-033) | ✅ |
+| Evidence collected per commit, not as one cumulative diff (D-033) | ✅ |
+| Repositories searched but contributing nothing still appear | ✅ |
+| `landed` / `not_found` / `pending` distinguished in the body | ✅ |
+| Each run records an operation per repository | ✅ |
+| `ticket show` reports stored state, never a fresh search | ✅ |
 
-One thing to settle: **evidence for a commit set is not a two-revision diff.** The existing
-collector takes a `ChangeSummary` from `compare_revisions`. A commit set needs either the union of
-the individual commit diffs, or a synthetic range. The union is more honest but can double-count a
-file touched by several commits.
+### Tests run
+
+```
+.venv/bin/python -m pytest  →  308 passed
+```
+
+### The trap the tests build
+
+A ticket's commits need not be contiguous. Diffing the first commit's parent against the last
+would attribute whatever else landed between them to the ticket, so a test constructs exactly
+that — ticket work, an unrelated commit, more ticket work — and asserts the unrelated file never
+appears.
+
+### Hazard left behind: CON-39
+
+The body is regenerated on every run. That is safe only while it is entirely machine-derived; the
+moment a reviewer can edit it (CON-12), regeneration destroys their work. Must be solved before
+review ships.
 
 ---
 

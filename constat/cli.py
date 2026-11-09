@@ -16,6 +16,7 @@ from .errors import InvalidInput, RepositoryError, WorkspaceError
 from .evidence import collect_evidence, describe_commit
 from .mapping import change_proposal, commit_record, state_proposal
 from .store import Registry, TicketStore, Workspace, database_path
+from .operations import gather
 from .tickets import TicketStatus, find_ticket_commits
 from .git import (
     compare_revisions,
@@ -73,6 +74,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
+
+    document = subparsers.add_parser(
+        "document",
+        help="gather evidence for a ticket across the registered repositories",
+        description=(
+            "Run the gathering operation for a ticket: resolve its commits in "
+            "every registered repository, collect bounded evidence, and expand "
+            "the ticket's document. The document is a draft and carries no "
+            "authority until a human approves a version of it."
+        ),
+    )
+    document.add_argument("reference", metavar="REF")
+    document.add_argument(
+        "--show", action="store_true", help="print the document body"
+    )
 
     ticket = subparsers.add_parser(
         "ticket",
@@ -216,59 +232,33 @@ def _run_init(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
-def _report_matches(registry: Registry, reference: str) -> None:
-    """Say where a ticket's work was found, and distinguish the three answers.
+def _run_document(args: argparse.Namespace) -> int:
+    try:
+        with Workspace.open(args.workspace) as workspace:
+            result = gather(workspace, args.reference)
+    except WorkspaceError as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_WORKSPACE
+    except RepositoryError as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_REPOSITORY
 
-    "Not in mainline yet", "already landed" and "found nothing" are different
-    results (D-031) and must not be rendered alike.
-    """
-    entries = registry.list()
-    if not entries:
-        print("No repositories registered, so nothing was searched.")
-        return
+    if args.show:
+        print(result.body)
+        return EXIT_OK
 
-    pending = landed = missing = 0
-    for entry in entries:
-        try:
-            repo = discover_repository(entry.source)
-            match = find_ticket_commits(
-                repo, reference, entry.default_branch, alias=entry.alias
-            )
-        except RepositoryError as exc:
-            print(f"  {entry.alias}: could not search — {exc}")
-            continue
-
-        if match.status is TicketStatus.PENDING:
-            pending += 1
-            print(f"  {entry.alias}: {match.commit_count} commit(s) ahead of "
-                  f"{entry.default_branch}")
-            for commit in match.commits[:5]:
-                print(f"    {commit.sha[:12]} [{commit.attribution.value}] "
-                      f"{commit.subject[:58]}")
-            for ref in dict.fromkeys(r for c in match.commits for r in c.found_on):
-                print(f"    found on {ref}")
-        elif match.status is TicketStatus.LANDED:
-            landed += 1
-            print(f"  {entry.alias}: already in {entry.default_branch} "
-                  f"({match.commit_count} commit(s))")
-        else:
-            missing += 1
-            print(f"  {entry.alias}: no commits reference this ticket")
-
+    print(f"ticket {result.reference}: document updated")
+    print(
+        f"  {result.repositories_searched} repository(ies) searched, "
+        f"{result.repositories_contributing} contributed evidence"
+    )
+    for finding in result.findings:
+        detail = finding.error or f"{len(finding.commits)} commit(s)"
+        print(f"    {finding.repository.alias}: {finding.status.value} — {detail}")
     print()
-    if pending:
-        print(f"{pending} repository(ies) have work staged ahead of mainline.")
-    if landed:
-        print(
-            f"{landed} repository(ies) have this work already in mainline. That "
-            "is not the same as finding nothing, but it is outside the window "
-            "Constat expects (D-031)."
-        )
-    if missing and not pending and not landed:
-        print(
-            "Nothing matched this reference anywhere. That means the reference "
-            "matched no commits — not that the ticket changed nothing."
-        )
+    print("Use --show to print the document. It is a draft: nothing here is")
+    print("approved, and approval is a separate, explicit step.")
+    return EXIT_OK
 
 
 def _run_ticket(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
@@ -279,15 +269,29 @@ def _run_ticket(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
     try:
         with Workspace.open(args.workspace) as workspace:
             tickets = TicketStore(workspace)
-            registry = Registry(workspace)
 
             if args.ticket_action == "add":
                 entry = tickets.add(args.reference)
                 print(f"opened ticket: {entry.reference}")
-                print("  document: created, empty")
+
+                # Fill the document immediately. Opening a ticket and then
+                # requiring a second command to populate it would leave an
+                # empty document lying around that says nothing.
+                result = gather(workspace, entry.reference)
+                print(
+                    f"  {result.repositories_searched} repository(ies) searched, "
+                    f"{result.repositories_contributing} contributed evidence"
+                )
+                for finding in result.findings:
+                    detail = finding.error or f"{len(finding.commits)} commit(s)"
+                    print(
+                        f"    {finding.repository.alias}: "
+                        f"{finding.status.value} — {detail}"
+                    )
                 print()
-                print("Searching registered repositories:")
-                _report_matches(registry, entry.reference)
+                print(f"Document written. See it with `constat document "
+                      f"{entry.reference} --show`.")
+                print("It is a draft and carries no authority until approved.")
                 return EXIT_OK
 
             if args.ticket_action == "list":
@@ -309,11 +313,30 @@ def _run_ticket(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
                     )
                     return EXIT_WORKSPACE
                 document = tickets.document(entry.reference)
-                print(f"ticket:   {entry.reference}")
-                print(f"document: {'empty' if document.is_empty else 'has content'}")
+                operations = workspace.execute(
+                    "SELECT o.kind, o.ran_at, o.summary, r.alias "
+                    "FROM operation o "
+                    "JOIN document d ON d.id = o.document_id "
+                    "JOIN ticket tk ON tk.id = d.ticket_id "
+                    "LEFT JOIN repository r ON r.id = o.repository_id "
+                    "WHERE tk.reference = ? ORDER BY o.ran_at, r.alias",
+                    (entry.reference,),
+                ).fetchall()
+
+                # Stored state only. Re-searching here would make `show`
+                # disagree with the document it is describing.
+                print(f"ticket:    {entry.reference}")
+                print(f"opened:    {entry.created_at.isoformat()}")
+                print(f"document:  {'empty' if document.is_empty else 'filled'}"
+                      f", updated {document.updated_at.isoformat()}")
+                print(f"operations: {len(operations)} recorded")
+                for row in operations:
+                    alias = row["alias"] or "(no repository)"
+                    print(f"    {row['ran_at']}  {alias}  {row['summary']}")
                 print()
-                print("Searching registered repositories:")
-                _report_matches(registry, entry.reference)
+                print(f"Run `constat document {entry.reference} --show` for the "
+                      "document itself,")
+                print(f"or `constat document {entry.reference}` to gather again.")
                 return EXIT_OK
     except WorkspaceError as exc:
         print(f"{PROG}: error: {exc}", file=sys.stderr)
@@ -504,6 +527,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "ticket":
         return _run_ticket(args, parser)
+
+    if args.command == "document":
+        return _run_document(args)
 
     if args.command == "analyse":
         return _run_analyse(args)

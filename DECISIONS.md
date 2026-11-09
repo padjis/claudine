@@ -8,6 +8,55 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-033 · 2026-11-10 · Evidence is collected per commit, and `ticket add` fills the document
+
+**Decision.** Two things, both about CON-34.
+
+**Evidence is collected per commit, not as one cumulative diff.** For each commit attributable to
+a ticket, Constat diffs it against its first parent and collects bounded evidence for that commit
+alone.
+
+**`ticket add` runs the gathering operation immediately.** Opening a ticket writes its document in
+the same invocation; there is no intermediate state where a ticket exists with an empty document
+that says nothing.
+
+**Context — per commit.** A ticket's commits need not be contiguous. Diffing the first commit's
+parent against the last would sweep in whatever else landed between them, attributing other
+people's work to the ticket. There is no single revision range that means "this ticket's effect",
+so there should not be a single diff pretending to be one.
+
+The cost is duplication: a file touched by three commits produces three excerpts. That is accepted
+because each hunk stays attributable to the commit that made it, which is the point of provenance
+(product rule 3). A test builds exactly the trap — ticket work, an unrelated commit, more ticket
+work — and asserts the unrelated file never appears.
+
+First parent rather than merge base, for a merge commit: that yields what the merge brought in,
+which is what the merge contributed.
+
+**Context — filling on add.** The earlier shape ran the same search at `ticket add`, printed it,
+and discarded it: `operation` stayed empty and the document stayed blank. Two implementations of
+one idea, one of which persisted nothing. The ephemeral version is deleted.
+
+**Consequences.**
+
+- `constat document <ref>` remains, for re-gathering after new commits and for `--show`. It is a
+  refresh, not a required first step.
+- **`ticket show` reports stored state only** and no longer re-searches. A `show` that searched
+  afresh could disagree with the document it was describing.
+- The document body is **regenerated** on each run rather than appended to, so re-running does not
+  duplicate findings. That is safe only while the body is entirely machine-derived. Once human
+  editing exists (CON-12), regeneration would destroy edits — recorded as **CON-39**, and it must
+  be solved before review ships.
+- Excerpt limits apply per commit, so a ticket with many commits can capture more in total than a
+  single range would. Every bundle states its own completeness, so nothing is hidden, but a
+  document-wide budget may be wanted later.
+- A commit with no parent (a root commit) has nothing to diff against. The reason is recorded on
+  the commit rather than dropping it, since dropping would under-report silently.
+
+**Status.** accepted
+
+---
+
 ## D-032 · 2026-11-10 · A ticket has no title
 
 **Decision.** A ticket is a reference and a creation time. There is no title field, and no
