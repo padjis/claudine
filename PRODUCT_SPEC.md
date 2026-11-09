@@ -57,21 +57,28 @@ A single report should offer both views, clearly separated.
 
 ## 6. MVP scope
 
-The MVP works **locally**, against **one** Git repository.
+The MVP works **locally**, against a **registered set** of Git repositories (D-027). A remote is
+registered by URL and cloned into a local cache; everything is then read with the same read-only
+Git layer.
 
-It must: select a revision range → assemble evidence → produce a structured proposal → let a person
-approve, reject or edit it → save approved documentation as a versioned baseline.
+It must: register repositories → open a ticket → run operations that gather evidence across the
+set → accumulate that into one living document per ticket → let a person edit and approve it →
+freeze an immutable, versioned baseline.
 
-A revision range is one of two kinds (D-016):
+**Every comparison is against the repository's default branch** (D-028), resolved per repository
+and never assumed to be `main`. Two shapes of question remain:
 
-| Kind | Question answered | Command |
-| --- | --- | --- |
-| **Closed** — `base` → `target` | What changed between two revisions? | `analyse` |
-| **Open** — a single revision | What does this revision do now? | `snapshot` |
+| Shape | Question answered |
+| --- | --- |
+| **Change** | What does this work add that mainline does not have? |
+| **State** | What does this revision contain now? |
 
 Both are needed. A delta alone cannot describe a product: the first baseline for a repository has
 nothing to diff against, the product promise is present-tense, and drift detection presumes a
 documented present state to measure against.
+
+A **ticket** owns exactly one document (D-029). Operations expand or edit the draft; approval
+freezes a version. The draft carries no authority — only a frozen version is product knowledge.
 
 ### 6.1 In scope
 
@@ -104,7 +111,10 @@ validated.
 Taken verbatim from the roadmap; these are the MVP's definition of done.
 
 1. A user can point Constat at a valid local Git repository.
-2. A user can compare two commits or tags and see changed files and commit metadata.
+2. ~~A user can compare two commits or tags~~ **Amended 2026-11-09 (D-028):** a user can see
+   changed files and commit metadata for work measured against the repository's default branch.
+   Release-to-release comparison is no longer in scope; a release tag is normally an ancestor of
+   mainline, so it has no mainline framing.
 3. The report links each important claim to inspectable evidence, or clearly labels it as an
    inference.
 4. The proposal is structured and understandable to both a developer and a business stakeholder.

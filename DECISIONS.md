@@ -8,6 +8,113 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-029 · 2026-11-09 · A ticket owns one living document, frozen on approval
+
+**Supersedes D-025's proposal-per-run model.** D-025's identity reasoning survives; its top-level
+object does not.
+
+**Decision.** A **ticket** owns exactly one **document**. Operations expand or edit that document
+rather than creating new top-level records. Approval freezes an immutable, versioned snapshot;
+later operations continue editing the draft, and every approved version stays recoverable.
+
+| Artefact | Mutable? | Lifetime |
+| --- | --- | --- |
+| Document (draft) | yes — operations append, humans edit | one per ticket, ongoing |
+| Document version | **no** — frozen at approval | one per approval, forever |
+
+**Context.** The user's model, and it is better than mine for a reason I had already logged
+without recognising: CON-30 ("re-running `analyse` fills the store with near-duplicate proposals")
+was not a storage problem, it was evidence that proposal-per-run was the wrong unit. Ten runs
+against one ticket should deepen one document, not create ten.
+
+It also promotes CON-29 from a peripheral idea to the primary workflow.
+
+**Consequences.**
+
+- **CON-30 is withdrawn**, not deferred. The problem does not exist in this model.
+- Product rules 4 and 5 are satisfied by the split, not by the draft: the draft is working
+  material and carries no authority; the frozen version is the governance record. "Edit the doc"
+  and "immutable baselines" only contradict each other if there is one artefact.
+- From D-025, kept: identity is generated rather than derived, and repository identity is the root
+  commit. A document version gets a fresh ID per approval for exactly the reason a proposal did.
+- From D-025, dropped: one top-level record per analysis run.
+- Persistence moves much earlier. A registry and an accumulating document both need storage before
+  any of this works, so CON-13's SQLite is now a prerequisite rather than a Phase 4 task.
+- An operation needs to be a first-class, recorded thing — what ran, against which repository, when,
+  and what it contributed. Otherwise a document becomes unattributable prose, which is the failure
+  this product exists to prevent.
+
+**Status.** accepted
+
+---
+
+## D-028 · 2026-11-09 · Mainline is the only reference point
+
+**Supersedes the closed-range half of D-016.** `snapshot` survives; arbitrary `--base`/`--target`
+does not.
+
+**Decision.** Every comparison is against the repository's **default branch**, resolved per
+repository and never assumed to be literally `main` (product rule 6, and D-009 found both subjects
+use `main` only by coincidence). Explicit base/target range selection is removed.
+
+**Context.** Chosen deliberately for a sharper model: the question Constat answers becomes "what
+does this work add that mainline does not have", which is the question a ticket actually poses.
+Merge-base semantics (D-021) already implement exactly this, with base = mainline.
+
+**Consequences — including one that is a real loss.**
+
+- **MVP acceptance criterion 2 is amended.** It read "a user can compare two commits or tags".
+  Release-to-release documentation is no longer possible: a release tag is normally an *ancestor*
+  of mainline, so `compare(mainline, v2.3.1)` is a backwards range and is refused by design
+  (D-021). PRODUCT_SPEC.md section 6.3 is updated to say comparison is against mainline.
+  Recorded rather than quietly dropped — this was flagged before the choice was made and accepted
+  with the cost understood.
+- The default branch must be **resolved** from each repository and stored in the registry. Hardcoding
+  `main` would break product rule 6 and any repository still on `master`.
+- `--base` and `--target` leave the CLI. The machinery behind them stays: `compare_revisions` is
+  unchanged, it simply always receives mainline as base.
+- Open and needing a decision during implementation: **what happens once a ticket's work is merged
+  into mainline.** At that point there is no divergence left, and "what does this add to mainline"
+  answers "nothing". The document must describe the commits' effect rather than the branch's
+  divergence, or every merged ticket goes blank. This is the one unresolved piece of the model.
+
+**Status.** accepted
+
+---
+
+## D-027 · 2026-11-09 · Constat holds a workspace of registered repositories
+
+**Amends D-001**, which kept the MVP to one repository per run. Local-first is unchanged;
+single-repository is not.
+
+**Decision.** Constat maintains persistent state: a **workspace** holding registered repositories.
+Repositories are added and removed at setup or at any later point. A remote is registered by URL
+and **cloned into a local cache**, then read with the existing read-only Git layer.
+
+**Context.** Operating on a set is the point of the product — "connect changes across several
+repositories to one capability" is the first stated differentiator, and `--repo` once per
+invocation never served it. The cross-repository demo was parked at CON-19, which made the
+differentiator the last thing to be proven.
+
+**Consequences.**
+
+- **Everything in `constat/git/` and `constat/evidence/` keeps working unchanged.** A cached clone
+  is an ordinary local repository, which is why clone-and-cache was chosen over API access: one
+  code path, not two, and the security posture of D-001 is preserved.
+- Fetching is a **write to the cache but never to the source**. Read-only against the user's
+  repositories still holds; the cache is Constat's own.
+- Credentials for private remotes are needed and must never be stored in the workspace
+  (product rule 7). Defer to the system Git credential helper rather than handling tokens.
+- A registered repository stores: alias, source (path or URL), cache location, root-commit identity
+  (D-025), and resolved default branch (D-028).
+- Staleness becomes a real concern. A cached clone is a point-in-time copy, so every document must
+  record **when the cache was last fetched**, or evidence silently ages. Unstated staleness in a
+  governance tool is the same class of failure as unstated truncation (D-023).
+
+**Status.** accepted
+
+---
+
 ## D-026 · 2026-11-09 · Pydantic bounds the published schema; internals stay dataclasses
 
 **Decision.** Pydantic becomes the project's first runtime dependency, applied **only** to the

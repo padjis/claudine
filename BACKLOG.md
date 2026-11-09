@@ -46,13 +46,13 @@ Ticket register. The single source of truth for *what work exists*; the single s
 | --- | --- | --- | --- |
 | CON-05 | Compare two revisions | A deterministic change summary for two revisions. | ✅ `6e3b07d` |
 | CON-06 | Collect inspectable evidence | Evidence records can be traced back to Git. | ✅ `eb957b6` |
-| CON-07 | Define the change data model | Stable, tested structured output. | ✅ |
+| CON-07 | Define the change data model | Stable, tested structured output. | ✅ `24d3746` — top-level object revised by D-029 |
 
 ## Phase 3 — Meaning and reporting
 
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
-| CON-08 | Classify changes conservatively | Classification never pretends to know business intent from a filename alone. | ⬜ next |
+| CON-08 | Classify changes conservatively | Classification never pretends to know business intent from a filename alone. | ⬜ unchanged, but now follows CON-31..34 |
 | CON-09 | Generate the first report | A developer can understand the report without reading raw command output. | ⬜ |
 | CON-10 | Separate facts from interpretation | Every claim has a provenance type; unsupported claims are visibly uncertain. | ⬜ |
 | CON-11 | Strengthen quality with tests | The report remains safe and useful across realistic Git cases. | ⬜ |
@@ -62,7 +62,7 @@ Ticket register. The single source of truth for *what work exists*; the single s
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
 | CON-12 | Implement review decisions | No proposal becomes official without an explicit human decision. | ⬜ |
-| CON-13 | Persist proposals and decisions | A restart does not lose review history. | ⬜ |
+| CON-13 | Persist proposals and decisions | A restart does not lose review history. | 🔁 **superseded by CON-31** — persistence is now a prerequisite, not Phase 4 |
 | CON-14 | Create immutable approved baselines | A later approval creates a new version; previous content remains recoverable. | ⬜ |
 | CON-15 | Compare against the last approved baseline | A reviewer can see what is new since the last approved state. | ⬜ |
 
@@ -73,7 +73,7 @@ Ticket register. The single source of truth for *what work exists*; the single s
 | CON-16 | Read GitHub repository metadata | Constat can identify the GitHub repository and map it to its local clone. | ⬜ |
 | CON-17 | Link pull requests to change proposals | A proposal can be traced to its originating PR. | ⬜ |
 | CON-18 | Add traceability references | A reviewer can navigate from a proposal to its supporting artefacts. | ⬜ |
-| CON-19 | Run a realistic multi-change scenario | A repeatable demo shows the product-level value, not just a Git diff. | ⬜ |
+| CON-19 | Run a realistic multi-change scenario | A repeatable demo shows the product-level value, not just a Git diff. | ⬜ no longer the *first* cross-repo work — CON-32 makes the set primary |
 | CON-20 | Package the MVP and document limits | A new person can run the demo and understand what Constat does and does not do. | ⬜ |
 
 ---
@@ -98,12 +98,46 @@ forces them.
 
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
-| CON-29 | Ticket-scoped documentation (`constat document <ref>`) | A proposal can be initialised from a reference found in commit messages, across one or more repositories. | ⬜ unblocked; `commit_set` is reserved in the schema (D-025) |
-| CON-30 | Surface near-duplicate proposals | Re-analysing a range does not bury the store in near-identical proposals. | ⬜ needed once CON-13 persists them |
+| CON-29 | Ticket-scoped documentation (`constat document <ref>`) | A proposal can be initialised from a reference found in commit messages, across one or more repositories. | 🔁 **promoted** — now the primary workflow, delivered by CON-33/34 |
+| CON-30 | ~~Surface near-duplicate proposals~~ | — | ❌ **withdrawn.** The problem was an artefact of proposal-per-run; D-029's one-document-per-ticket model does not have it. |
+
+## Workspace model (D-027, D-028, D-029)
+
+Added 2026-11-09 after a direction change. These replace the single-repository, one-shot shape the
+first seven sessions assumed. The Git and evidence layers are unaffected.
+
+| ID | Title | Done when | Status |
+| --- | --- | --- | --- |
+| CON-31 | Workspace storage | A SQLite workspace persists across runs; schema versioned. | ⬜ **next** — prerequisite for everything below |
+| CON-32 | Repository registry | Repositories can be added, listed and removed; local paths and remote URLs both work. | ⬜ |
+| CON-33 | Tickets and documents | A ticket can be opened and owns exactly one living document. | ⬜ |
+| CON-34 | Operations against the set | An operation gathers evidence for a ticket across every registered repository, measured against mainline, and expands the document. | ⬜ |
+| CON-35 | Remote clone-and-cache | A remote URL is cloned into a local cache and read like any local repository; fetch time is recorded. | ⬜ |
+| CON-36 | Default-branch resolution | Each repository's default branch is resolved and stored, never assumed to be `main`. | ⬜ small, needed by CON-34 |
+| CON-37 | Merged-ticket semantics | A ticket whose work is already merged still produces a document rather than an empty one. | ⬜ **unresolved design** — see note |
+| CON-38 | Cache staleness disclosure | Every document states when each repository's cache was last fetched. | ⬜ |
 
 ---
 
 ## Notes on specific tickets
+
+### CON-37 — the one genuinely unresolved piece
+
+D-028 makes mainline the only reference point, which works for divergent work: `compare(mainline,
+branch)` is "what this adds". Once a ticket is **merged**, there is no divergence left and the
+same question answers "nothing".
+
+So a merged ticket's document must be built from the *effect of its commits* rather than from a
+branch's divergence from mainline. That is the `commit_set` selection reserved in D-025, arriving
+earlier than planned. Needs settling before CON-34, because most tickets worth documenting are
+already merged — measured on Subject A, roughly 5% of commits even carry a reference, and those
+that do are overwhelmingly in mainline already.
+
+### CON-31 — why persistence moved
+
+It was CON-13, in Phase 4. A registry (CON-32) and an accumulating document (CON-33) both need
+storage to exist at all, so it became a prerequisite. The integrity rules in ARCHITECTURE.md
+section 5 apply from here on rather than later.
 
 ### CON-04 — done, and the tag problem turned out not to be due here
 

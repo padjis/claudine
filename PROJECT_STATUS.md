@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-09
 **Current phase:** Phase 2 — Evidence engine
-**Current session:** 07 — Define the change data model
+**Current session:** direction change — re-planning before CON-31
 
 ---
 
@@ -293,32 +293,49 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-**Session 08 — Classify changes conservatively (CON-08).**
+**CON-31 — workspace storage.** A SQLite workspace that persists across runs, schema versioned.
+**Done when:** a restart does not lose registered repositories, tickets or documents.
 
-Initial categories: feature, bug fix, refactor, configuration, API/schema change, test-only.
-Uncertain cases marked `unknown`.
-**Done when:** classification never pretends to know business intent from a filename alone.
+Prerequisite for the whole workspace model. Nothing below it works without storage.
 
-This is the ticket where D-010 gets tested. "Business rule change" is the product's subject, and
-the deterministic spine for it is:
+### Why the plan changed
 
-| Signal | Why it is rule-bearing |
-| --- | --- |
-| Numbered migration changelogs | A schema or data migration is almost always a rule change, and the directory name states intent. |
-| Feature flags | A flag *is* a business rule toggle. |
-| Bean-validation annotations | `@NotNull`, `@Size`, `@Pattern` are constraints in machine-readable form. |
+The first seven sessions assumed a stateless, single-repository, one-shot tool. The intended shape
+is a **workspace**: a registered set of repositories, operations applied across the set, always
+measured against mainline, accumulating into one living document per ticket.
 
-Everything else returns `unknown`. The done-when is phrased as a prohibition, so the tests should
-be too: the strongest ones will assert what classification **refuses** to conclude.
+Recorded as D-027 (workspace), D-028 (mainline-only), D-029 (ticket documents). The new work is
+CON-31 through CON-38.
 
-Two things to settle while implementing it:
+### What survives
 
-- **Language coupling.** The three signals above are Java-shaped. Hard-coding them makes Constat a
-  Java tool. Decide whether detection is pluggable from the start or deliberately single-language
-  for the MVP, and record it either way.
-- **Where classification lives in the model.** A category is an inference, not an observed fact, so
-  it cannot be stored like one. It likely needs `provenance: assumption` and a pointer to whichever
-  evidence triggered it — which is CON-10's shape arriving early.
+Everything in `constat/git/` and `constat/evidence/` — repository reading, revision resolution,
+merge-base comparison, bounded evidence with reproduce commands. `RevisionRef`, `CommitRecord`,
+`FileChangeRecord`, `EvidenceRecord` and `Completeness` carry over unchanged. A cached clone is an
+ordinary local repository, which is why clone-and-cache beat API access: one read path, not two.
+
+The 179 tests still pass untouched.
+
+### What changes
+
+- `Proposal`-per-run becomes `Document`-per-ticket (D-029).
+- `--base`/`--target` leave the CLI; `compare_revisions` stays and always receives mainline.
+- Persistence moves from CON-13 (Phase 4) to CON-31 (now).
+- **CON-30 is withdrawn.** It existed because proposal-per-run was the wrong unit; the new model
+  does not have the problem.
+- MVP acceptance criterion 2 is amended: release-to-release comparison leaves scope, because a
+  release tag is normally an ancestor of mainline and so has no mainline framing. Flagged before
+  the decision and accepted with the cost understood.
+
+### The one unresolved piece: CON-37
+
+Mainline-only works for divergent work. Once a ticket is **merged** there is no divergence, and
+"what does this add to mainline" answers "nothing" — so every merged ticket would document as
+empty. A merged ticket's document has to be built from the effect of its commits instead, which is
+the `commit_set` selection reserved in D-025 arriving earlier than planned.
+
+This needs settling before CON-34, and it is not a detail: most tickets worth documenting are
+already merged.
 
 ---
 
