@@ -11,7 +11,7 @@ silently; a trigger cannot be bypassed by forgetting to call the right helper.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE schema_meta (
@@ -36,10 +36,12 @@ CREATE TABLE repository (
     last_fetched_at TEXT
 );
 
+-- No title column. A title is unverified free text, and the provenance
+-- taxonomy has no slot for "unverified label" (D-032). A reference is what
+-- Constat matches on; anything descriptive must come from evidence.
 CREATE TABLE ticket (
     id          INTEGER PRIMARY KEY,
     reference   TEXT    NOT NULL UNIQUE,
-    title       TEXT,
     created_at  TEXT    NOT NULL
 );
 
@@ -102,3 +104,16 @@ BEGIN
         'document_version is append-only: approved versions cannot be deleted');
 END;
 """
+
+
+# Ordered migrations from one schema version to the next. A governance tool
+# that discarded stored decisions on every schema change would contradict its
+# own promise (product rule 5), so a version bump carries a migration rather
+# than a refusal.
+# Statements are listed individually rather than as a script: sqlite3's
+# executescript() implicitly commits, which would silently defeat the
+# surrounding transaction and could leave a workspace half-migrated.
+MIGRATIONS: dict[int, tuple[str, ...]] = {
+    # 1 -> 2: drop ticket.title (D-032).
+    1: ("ALTER TABLE ticket DROP COLUMN title",),
+}

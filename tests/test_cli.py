@@ -12,6 +12,7 @@ import sys
 import pytest
 
 import constat
+from constat.store import SCHEMA_VERSION
 from helpers import git
 from constat.cli import PROG, build_parser, main
 
@@ -308,7 +309,7 @@ class TestInitCommand:
 
         out = capsys.readouterr().out
         assert "workspace:" in out
-        assert "schema:     version 1" in out
+        assert f"schema:     version {SCHEMA_VERSION}" in out
         assert (tmp_path / "ws" / "workspace.db").exists()
 
     def test_init_reports_the_workspace_it_used(self, tmp_path, capsys):
@@ -430,7 +431,7 @@ class TestTicketCommands:
         ws = self._ws(tmp_path)
         capsys.readouterr()
 
-        assert main(["--workspace", ws, "ticket", "add", "622", "--title", "T"]) == 0
+        assert main(["--workspace", ws, "ticket", "add", "622"]) == 0
         out = capsys.readouterr().out
         assert "opened ticket: 622" in out
         assert "document: created, empty" in out
@@ -446,11 +447,11 @@ class TestTicketCommands:
 
     def test_list_and_show(self, tmp_path, capsys):
         ws = self._ws(tmp_path)
-        main(["--workspace", ws, "ticket", "add", "622", "--title", "Prune"])
+        main(["--workspace", ws, "ticket", "add", "622"])
         capsys.readouterr()
 
         assert main(["--workspace", ws, "ticket", "list"]) == 0
-        assert "Prune" in capsys.readouterr().out
+        assert "622" in capsys.readouterr().out
 
         assert main(["--workspace", ws, "ticket", "show", "622"]) == 0
         assert "document: empty" in capsys.readouterr().out

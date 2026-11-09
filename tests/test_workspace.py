@@ -42,8 +42,8 @@ def add_repository(ws: Workspace, alias: str = "subject-a") -> int:
 
 def add_ticket(ws: Workspace, reference: str = "CON-31") -> int:
     cursor = ws.execute(
-        "INSERT INTO ticket (reference, title, created_at) VALUES (?, ?, ?)",
-        (reference, "A ticket", utc_now()),
+        "INSERT INTO ticket (reference, created_at) VALUES (?, ?)",
+        (reference, utc_now()),
     )
     return int(cursor.lastrowid)
 
@@ -158,7 +158,7 @@ class TestSchemaVersioning:
         with pytest.raises(WorkspaceVersionError, match="version 99"):
             Workspace.open(home)
 
-    def test_an_older_schema_is_refused_while_no_migration_exists(self, home: Path):
+    def test_an_older_schema_with_no_migration_path_is_refused(self, home: Path):
         Workspace.create(home).close()
         connection = sqlite3.connect(database_path(home))
         connection.execute("UPDATE schema_meta SET schema_version = 0 WHERE id = 1")
@@ -352,3 +352,87 @@ class TestOperations:
 
         with Workspace.open(home) as ws:
             assert ws.execute("SELECT COUNT(*) c FROM operation").fetchone()["c"] == 1
+
+
+class TestMigration:
+    """A version bump carries a migration, not a refusal.
+
+    A governance tool that discarded stored decisions whenever its schema
+    changed would contradict product rule 5 on the one surface where it
+    matters most.
+    """
+
+    def _make_v1(self, home: Path) -> None:
+        """Build a workspace at schema version 1, title column and all."""
+        from constat.store.schema import SCHEMA
+
+        home.mkdir(parents=True, exist_ok=True)
+        v1 = SCHEMA.replace(
+            "CREATE TABLE ticket (\n"
+            "    id          INTEGER PRIMARY KEY,\n"
+            "    reference   TEXT    NOT NULL UNIQUE,\n"
+            "    created_at  TEXT    NOT NULL\n"
+            ");",
+            "CREATE TABLE ticket (\n"
+            "    id          INTEGER PRIMARY KEY,\n"
+            "    reference   TEXT    NOT NULL UNIQUE,\n"
+            "    title       TEXT,\n"
+            "    created_at  TEXT    NOT NULL\n"
+            ");",
+        )
+        connection = sqlite3.connect(home / "workspace.db")
+        connection.executescript(v1)
+        connection.execute(
+            "INSERT INTO schema_meta (id, schema_version, constat_version, created_at) "
+            "VALUES (1, 1, '0.0.1', ?)",
+            (utc_now(),),
+        )
+        connection.execute(
+            "INSERT INTO ticket (reference, title, created_at) VALUES ('622', 'A title', ?)",
+            (utc_now(),),
+        )
+        connection.commit()
+        connection.close()
+
+    def test_a_v1_workspace_is_migrated_on_open(self, home: Path):
+        self._make_v1(home)
+        with Workspace.open(home) as ws:
+            assert ws.schema_version == SCHEMA_VERSION
+
+    def test_migration_preserves_the_stored_ticket(self, home: Path):
+        """Dropping a column must not drop the row."""
+        self._make_v1(home)
+        with Workspace.open(home) as ws:
+            row = ws.execute("SELECT reference FROM ticket").fetchone()
+        assert row["reference"] == "622"
+
+    def test_migration_removes_the_title_column(self, home: Path):
+        self._make_v1(home)
+        with Workspace.open(home) as ws:
+            columns = {
+                r["name"] for r in ws.execute("PRAGMA table_info(ticket)")
+            }
+        assert "title" not in columns
+        assert {"id", "reference", "created_at"} <= columns
+
+    def test_migration_is_persisted_not_repeated(self, home: Path):
+        self._make_v1(home)
+        Workspace.open(home).close()
+
+        connection = sqlite3.connect(home / "workspace.db")
+        stored = connection.execute(
+            "SELECT schema_version FROM schema_meta"
+        ).fetchone()[0]
+        connection.close()
+        assert stored == SCHEMA_VERSION
+
+    def test_a_version_with_no_migration_is_still_refused(self, home: Path):
+        """Migrating is the rule; guessing is not."""
+        Workspace.create(home).close()
+        connection = sqlite3.connect(home / "workspace.db")
+        connection.execute("UPDATE schema_meta SET schema_version = -5 WHERE id = 1")
+        connection.commit()
+        connection.close()
+
+        with pytest.raises(WorkspaceVersionError, match="no migration"):
+            Workspace.open(home)

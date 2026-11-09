@@ -138,6 +138,21 @@ an explicit list. The branch-name signal (`feat/622-…`) is the better one wher
 unambiguous, and independent of commit-message discipline, which only ~5% of Subject A's commits
 exercise.
 
+### CON-33 — no ticket title, and the first migration
+
+The title was dropped (D-032): unverified free text has no category in the provenance taxonomy,
+and the nearest one — `human_decision` — means an approval, not a note. Anything descriptive must
+come from evidence, and can be derived at display time rather than stored.
+
+The useful side effect is the **first schema migration**. Version 2 drops the column and preserves
+the rows, establishing that a version bump carries a migration rather than a refusal. A governance
+tool that lost stored decisions whenever its schema changed would contradict product rule 5 on the
+surface where it matters most.
+
+Note for future migrations: `executescript()` implicitly commits, so it cannot be used inside a
+transaction. Statements are listed individually. A test caught this with "cannot commit - no
+transaction is active".
+
 ### CON-33 — the expected window, and the three answers
 
 D-031 narrowed the search: a ticket's work is expected to be **merged onto an integration or

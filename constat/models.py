@@ -122,10 +122,12 @@ class Ticket(Frozen):
     `ADR-0019`, `plans/0015` and `repo#617`, so constraining the format would
     exclude references that already exist. Matching is the resolver's job
     (D-030), not the schema's.
+
+    There is deliberately no title (D-032): it would be unverified free text
+    in a product whose taxonomy has no category for one.
     """
 
     reference: str = Field(min_length=1)
-    title: str | None = None
     created_at: datetime
 
 

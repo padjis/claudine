@@ -17,7 +17,7 @@ from pathlib import Path
 
 from .. import __version__
 from ..errors import WorkspaceError, WorkspaceVersionError
-from .schema import SCHEMA, SCHEMA_VERSION
+from .schema import MIGRATIONS, SCHEMA, SCHEMA_VERSION
 
 DEFAULT_HOME = Path("~/.constat")
 HOME_ENV = "CONSTAT_HOME"
@@ -118,12 +118,42 @@ class Workspace:
                 "misinterpret."
             )
         if found < SCHEMA_VERSION:
-            connection.close()
-            raise WorkspaceVersionError(
-                f"the workspace at {path} uses schema version {found}; this "
-                f"Constat expects {SCHEMA_VERSION} and no migration exists yet."
-            )
+            try:
+                cls._migrate(connection, found, path)
+            except Exception:
+                connection.close()
+                raise
         return cls(connection, path)
+
+    @staticmethod
+    def _migrate(connection: sqlite3.Connection, found: int, path: Path) -> None:
+        """Bring an older workspace up to the current schema.
+
+        Each step runs in a transaction, so a failed migration leaves the
+        workspace on its previous version rather than half-converted.
+        """
+        version = found
+        while version < SCHEMA_VERSION:
+            step = MIGRATIONS.get(version)
+            if step is None:
+                raise WorkspaceVersionError(
+                    f"the workspace at {path} uses schema version {version} and "
+                    f"no migration to {version + 1} exists. Constat will not "
+                    "guess at the shape of stored decisions."
+                )
+            connection.execute("BEGIN")
+            try:
+                for statement in step:
+                    connection.execute(statement)
+                connection.execute(
+                    "UPDATE schema_meta SET schema_version = ? WHERE id = 1",
+                    (version + 1,),
+                )
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+            connection.execute("COMMIT")
+            version += 1
 
     @classmethod
     def open_or_create(cls, override: str | os.PathLike[str] | None = None) -> "Workspace":

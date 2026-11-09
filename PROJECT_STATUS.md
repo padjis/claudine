@@ -323,6 +323,7 @@ file touched by several commits.
 | Ticket and document created in one transaction | ✅ asserted no orphan is reachable |
 | A second document for one ticket is impossible | ✅ schema `UNIQUE` |
 | References stored verbatim — four shapes exist in the subjects | ✅ |
+| No ticket title; schema v2 migration drops the column (D-032) | ✅ |
 | Attribution by branch name and by commit message (D-030) | ✅ |
 | Search window is everything ahead of mainline (D-031) | ✅ |
 | `pending` / `landed` / `not_found` kept distinct | ✅ |
@@ -331,10 +332,10 @@ file touched by several commits.
 ### Tests run
 
 ```
-.venv/bin/python -m pytest  →  281 passed
+.venv/bin/python -m pytest  →  286 passed
 ```
 
-33 new tests.
+38 new tests, including five that migrate a real version-1 workspace.
 
 ### On the real subjects
 

@@ -17,7 +17,6 @@ from .workspace import Workspace, utc_now
 def _ticket(row) -> Ticket:
     return Ticket(
         reference=row["reference"],
-        title=row["title"],
         created_at=datetime.fromisoformat(row["created_at"]),
     )
 
@@ -37,7 +36,7 @@ class TicketStore:
     def __init__(self, workspace: Workspace) -> None:
         self._workspace = workspace
 
-    def add(self, reference: str, title: str | None = None) -> Ticket:
+    def add(self, reference: str) -> Ticket:
         """Open a ticket and its document atomically."""
         if self.find(reference) is not None:
             raise AlreadyRegistered(
@@ -49,8 +48,8 @@ class TicketStore:
         now = utc_now()
         with self._workspace.transaction() as ws:
             cursor = ws.execute(
-                "INSERT INTO ticket (reference, title, created_at) VALUES (?, ?, ?)",
-                (reference, title, now),
+                "INSERT INTO ticket (reference, created_at) VALUES (?, ?)",
+                (reference, now),
             )
             ws.execute(
                 "INSERT INTO document (ticket_id, created_at, updated_at, body) "

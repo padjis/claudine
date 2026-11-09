@@ -8,6 +8,42 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-032 · 2026-11-10 · A ticket has no title
+
+**Decision.** A ticket is a reference and a creation time. There is no title field, and no
+`--title` option. Schema bumped to version 2 with a migration dropping the column.
+
+**Context.** The title was added for readability — `ticket list` showing bare `622`, `ADR-0019`,
+`plans/0015` is hard to scan. But it is **unverified free text**, and the provenance taxonomy
+(PRODUCT_SPEC.md section 7.1) has no category for one. The nearest, `human_decision`, is wrong: a
+decision is an approval, not a note. A title appearing in a document could be read as established
+when nobody checked it against anything — in a product whose entire discipline is separating what
+is supported from what is asserted.
+
+Two alternatives were considered and rejected: marking it as an unverified label (which keeps the
+hazard and adds ceremony), and deriving it from evidence such as a branch name or the first
+attributed commit subject (defensible, but it adds a field nothing needs yet; a derived label can
+be rendered on demand without being stored).
+
+**Consequences.**
+
+- `ticket list` shows bare references. If that proves unreadable in practice, the fix is to render
+  a label derived from attributed evidence at display time, not to store free text.
+- **The first schema migration exists because of this**, which is the useful part. A governance
+  tool that discarded stored decisions whenever its schema changed would contradict product
+  rule 5 on exactly the surface where it matters most. Version bumps carry migrations; only a
+  version with no migration path is refused.
+- `executescript()` is not used for migrations: it implicitly commits, which would silently defeat
+  the surrounding transaction and could leave a workspace half-migrated. Statements are listed and
+  executed individually. Found by a test that failed with "cannot commit - no transaction is
+  active".
+- Tests build a real version-1 workspace, migrate it, and assert the row survives while the column
+  does not. Asserting the version number alone would not have shown that data was preserved.
+
+**Status.** accepted
+
+---
+
 ## D-031 · 2026-11-10 · A ticket is expected to be merged, but not yet into mainline
 
 **Refines D-030.** The commit set is not searched across all of history; it is searched in the

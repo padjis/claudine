@@ -87,7 +87,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     ticket_add = ticket_actions.add_parser("add", help="open a ticket")
     ticket_add.add_argument("reference", metavar="REF", help="e.g. 622, ABC-123")
-    ticket_add.add_argument("--title", metavar="TEXT")
 
     ticket_actions.add_parser("list", help="list tickets")
 
@@ -283,10 +282,8 @@ def _run_ticket(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
             registry = Registry(workspace)
 
             if args.ticket_action == "add":
-                entry = tickets.add(args.reference, args.title)
+                entry = tickets.add(args.reference)
                 print(f"opened ticket: {entry.reference}")
-                if entry.title:
-                    print(f"  title: {entry.title}")
                 print("  document: created, empty")
                 print()
                 print("Searching registered repositories:")
@@ -300,8 +297,7 @@ def _run_ticket(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
                     return EXIT_OK
                 print(f"{len(entries)} ticket(s):")
                 for entry in entries:
-                    suffix = f" — {entry.title}" if entry.title else ""
-                    print(f"  {entry.reference}{suffix}")
+                    print(f"  {entry.reference}")
                 return EXIT_OK
 
             if args.ticket_action == "show":
@@ -314,8 +310,6 @@ def _run_ticket(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
                     return EXIT_WORKSPACE
                 document = tickets.document(entry.reference)
                 print(f"ticket:   {entry.reference}")
-                if entry.title:
-                    print(f"title:    {entry.title}")
                 print(f"document: {'empty' if document.is_empty else 'has content'}")
                 print()
                 print("Searching registered repositories:")

@@ -177,7 +177,7 @@ class TestTicketStore:
 
     def test_opening_a_ticket_creates_its_document(self, store: TicketStore):
         """A ticket without a document is a state the model forbids (D-029)."""
-        ticket = store.add("622", "Prune dead tokens")
+        ticket = store.add("622")
 
         assert isinstance(ticket, Ticket)
         document = store.document("622")
@@ -205,8 +205,10 @@ class TestTicketStore:
         for reference in ("622", "ADR-0019", "plans/0015", "repo#617"):
             assert store.add(reference).reference == reference
 
-    def test_a_title_is_optional(self, store: TicketStore):
-        assert store.add("622").title is None
+    def test_there_is_no_title_field(self, store: TicketStore):
+        """Dropped in D-032: unverified free text has no place in a product
+        whose provenance taxonomy has no category for it."""
+        assert not hasattr(store.add("622"), "title")
 
     def test_listing_is_empty_initially(self, store: TicketStore):
         assert store.list() == ()
@@ -216,7 +218,7 @@ class TestPersistence:
     def test_tickets_and_documents_survive_a_restart(self, tmp_path: Path):
         home = tmp_path / "ws"
         with Workspace.create(home) as ws:
-            TicketStore(ws).add("622", "Prune dead tokens")
+            TicketStore(ws).add("622")
 
         with Workspace.open(home) as ws:
             store = TicketStore(ws)
