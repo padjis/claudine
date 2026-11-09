@@ -1,8 +1,8 @@
 # Project status
 
-**Last updated:** 2026-11-08
-**Current phase:** Phase 1 — Foundation
-**Current session:** 05 — Compare two revisions
+**Last updated:** 2026-11-09
+**Current phase:** Phase 2 — Evidence engine
+**Current session:** 06 — Collect inspectable evidence
 
 ---
 
@@ -11,8 +11,47 @@
 The repository is public at `https://github.com/padjis/constat`. Session 01 was committed and
 pushed as `b092b62`.
 
-`analyse` produces a deterministic file-level change summary; `snapshot` lists the files present at
-a revision. No evidence is collected and nothing is classified — that is Sessions 06 and 08.
+`analyse` reports file changes, the commits behind them, and bounded diff excerpts that each record
+the command regenerating them in full. `snapshot` reports the file inventory and commit metadata.
+Nothing is classified and no report is rendered — Sessions 08 and 09.
+
+### Session 06 — done when: *evidence records can be traced back to Git* ✅
+
+| Item | Status |
+| --- | --- |
+| `constat/evidence/collector.py` — commits, excerpts, source pointers | ✅ |
+| Commit metadata: sha, author, committer, both dates, subject, body, parents | ✅ |
+| Author and committer never collapsed (a rebase rewrites one, not the other) | ✅ |
+| Merge commits included and flagged, not filtered out | ✅ |
+| Bounded excerpts, 400 lines/file and 4000/comparison (D-023) | ✅ measured, not invented |
+| Fair-share allocation rather than first-come (D-024) | ✅ |
+| Every excerpt records a reproduce command — **tested by running it** | ✅ |
+| Truncation always stated: total lines, omitted count, reason | ✅ |
+| Binary files recorded as binary, never given a fabricated diff | ✅ |
+| A file is never dropped from the record, only its text | ✅ |
+
+### Tests run
+
+```
+.venv/bin/python -m pytest  →  143 passed
+```
+
+29 new tests. The central one actually executes the recorded `git` command and asserts it returns
+content the truncated excerpt does not contain — traceability proven rather than asserted.
+
+### Verified against real repositories
+
+- `237feed` `v2611f845`→`v26113ec4`: 7 commits, 29 files, 2223 lines captured, 1 file truncated.
+- `237feed-app` `v2.3.0`→`v2.3.1`: 18 commits, 50 files, **49 captured whole**; only
+  `package-lock.json` truncated, at 393 of 3835 lines.
+
+### A bug caught before shipping
+
+The first implementation spent the excerpt budget first-come down the sorted file list. On the real
+`237feed-app` range that meant `package-lock.json` took 400 of 4000 lines and files later in the
+alphabet got **nothing** — evidence selection determined by filename ordering. Fixed by allocating
+fairly before keeping any text (D-024); the real range went from starving later files to capturing
+49 of 50 whole.
 
 ### Session 05 — done when: *a deterministic change summary for two revisions* ✅
 
@@ -215,31 +254,26 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-**Session 06 — Collect inspectable evidence (CON-06).**
+**Session 07 — Define the change data model (CON-07).**
 
-Capture commit IDs, authors, dates, messages, file paths and bounded diff excerpts. Preserve source
-references so a reviewer can inspect the original.
-**Done when:** evidence records can be traced back to Git.
+Typed models for revision range, repository, commit, file change, evidence item and proposal, with
+schema validation.
+**Done when:** stable, tested structured output.
 
-Scope for that session:
+**Blocked on CON-24 first.** The unit of a proposal is still open (Q1, widened by D-016). The data
+model cannot be settled while it is: a proposal keyed on `(repository, revision_range)` and one
+keyed on a commit set (CON-29) have different shapes. Settle CON-24, then build.
 
-- Commit enumeration with `git log <merge-base>..<target>`, which already has merge-base semantics
-  and so agrees with D-021 without special handling.
-- Bounded diff excerpts per file, with per-file and per-proposal caps (D-005).
-- A source pointer (`rev:path:line-range`) on every excerpt, so the full original is always
-  re-derivable from Git and Constat never becomes the only copy of the evidence.
-- Evidence for `snapshot` too, not only `analyse` — and without borrowing change vocabulary (D-022).
+Scope once unblocked:
 
-Two things to settle while implementing it:
+- Pydantic enters here, as planned in D-002 and deferred in D-015 — the first runtime dependency,
+  and the reason for it should be recorded.
+- `schema_version` on everything persisted (D-008).
+- The existing frozen dataclasses in `config.py`, `git/diff.py` and `evidence/collector.py` either
+  become Pydantic models or stay as internal types with a mapping layer. Pick one deliberately;
+  having both conventions by accident would be the worst outcome.
 
-- **What the caps actually are.** D-005 requires bounds but names no numbers. `237feed` has merges
-  and a 628-file tree, so a 50-file range with full diffs is already a large document. Pick numbers
-  and record them, rather than leaving a magic constant.
-- **Whether `-M` rename detection should become `-C` (copy detection) as well.** Copies are more
-  expensive to detect and more ambiguous; currently off. Leaving it off is the conservative choice
-  and should be stated rather than defaulted into.
-
-Explicitly **not** in Session 06: classification or interpretation. That is CON-08.
+Explicitly **not** in Session 07: classification, reporting or persistence.
 
 ---
 

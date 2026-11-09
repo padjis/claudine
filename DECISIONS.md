@@ -8,6 +8,81 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-024 · 2026-11-09 · Excerpt budget is shared fairly, not spent first-come
+
+**Decision.** The total line budget is allocated across changed files *before* any text is kept,
+smallest need first: each file is offered an equal share of what remains, takes only what it needs,
+and the surplus is redistributed. Files are never served in path order.
+
+**Context.** The first implementation spent the budget as it walked the sorted change list. Run
+against `237feed-app` `v2.3.0`→`v2.3.1` it produced the obvious failure: `package-lock.json` sorts
+early, took its full 400-line allowance out of a 4000-line budget, and files later in the alphabet
+received **nothing**. Which evidence a reviewer saw depended on filename ordering.
+
+For a governance tool that is indefensible. A file named `zzz_pricing_rules.java` would be silently
+excerpt-free while a generated lockfile was quoted at length — and the report would look equally
+confident either way.
+
+**Consequences.**
+
+- Measured on the same real range after the change: **49 of 50 files captured whole**, with only
+  `package-lock.json` truncated (393 of 3835 lines). The generated file absorbs the loss instead of
+  imposing it on source files.
+- Allocation requires reading every diff before keeping any of it, so the whole range is held in
+  memory briefly. Acceptable at this scale (7442 lines is well under a megabyte); revisit if a range
+  ever approaches repository size.
+- Ties break on path, so allocation is deterministic and does not depend on dictionary ordering.
+- A test asserts that two equally-sized files get shares within one line of each other, and another
+  asserts a small file survives alongside a 2000-line sibling. Both would fail under first-come.
+- This is **not** classification. Constat is not deciding that lockfiles matter less — it has no
+  opinion about any file. Fair sharing simply removes an arbitrary bias. Treating generated files
+  differently on purpose would be CON-08's business, and would need evidence.
+
+**Status.** accepted
+
+---
+
+## D-023 · 2026-11-09 · Evidence is bounded by measured limits, and every omission is stated
+
+**Decision.** Diff excerpts are capped at **400 lines per file** and **4000 lines per comparison**.
+Every excerpt records its true total line count, whether it was truncated, how many lines were
+omitted and why. Every excerpt — including a fully omitted one — carries a source pointer and the
+exact `git` command that regenerates it in full.
+
+**Context.** D-005 required bounded evidence but named no numbers. These were measured against the
+subject repositories on 2026-11-08 rather than invented:
+
+| Range | Files | Diff lines | Largest file |
+| --- | --- | --- | --- |
+| `237feed` `v2611f845`→`v26113ec4` | 29 | 2255 | 345 |
+| `237feed-app` `v2.3.0`→`v2.3.1` | 50 | 7442 | 3835 (`package-lock.json`) |
+
+A 400-line per-file cap captures essentially all genuine source changes in both ranges while
+containing the generated lockfile. The per-file and total caps are separate precisely because one
+pathological file should not be able to consume a whole range's budget.
+
+**Consequences.**
+
+- **Truncation is only safe because the original stays reachable.** The recorded command is tested
+  by actually running it and confirming it returns content the excerpt does not contain. Without
+  that, bounding would violate "evidence is inspectable" (product rule 2).
+- **A file is never dropped from the record.** Running out of budget removes an excerpt's *text*,
+  never its entry — omitting the file would under-report the change itself.
+- `EvidenceBundle.is_complete` and `completeness_note()` exist so a report can never imply
+  completeness it does not have. CON-09 must surface the note.
+- Binary files are recorded as binary with no excerpt and a zero line count, rather than being given
+  a fabricated textual diff.
+- Author and committer are both captured and never collapsed: a rebase or cherry-pick rewrites the
+  committer while preserving the author, so merging them would misattribute work.
+- **Privacy note for later:** evidence includes author and committer email addresses. That is fine
+  locally, but when the optional AI provider arrives (D-003), sending commit metadata to a third
+  party means sending personal data. PRODUCT_SPEC.md rule 7 applies and the question must be
+  settled before any provider is wired up, not after.
+
+**Status.** accepted
+
+---
+
 ## D-022 · 2026-11-08 · State is read with `ls-tree`, not as a diff against the empty tree
 
 **Decision.** `summarise_state` lists the files present at a revision using `ls-tree -r`, and

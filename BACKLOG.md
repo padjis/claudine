@@ -44,9 +44,9 @@ Ticket register. The single source of truth for *what work exists*; the single s
 
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
-| CON-05 | Compare two revisions | A deterministic change summary for two revisions. | ✅ |
-| CON-06 | Collect inspectable evidence | Evidence records can be traced back to Git. | ⬜ next |
-| CON-07 | Define the change data model | Stable, tested structured output. | ⬜ |
+| CON-05 | Compare two revisions | A deterministic change summary for two revisions. | ✅ `6e3b07d` |
+| CON-06 | Collect inspectable evidence | Evidence records can be traced back to Git. | ✅ |
+| CON-07 | Define the change data model | Stable, tested structured output. | ⬜ next — blocked on CON-24 |
 
 ## Phase 3 — Meaning and reporting
 
@@ -130,6 +130,22 @@ abandoned, just not yet real.
   otherwise scope widens silently, which is how a confidently wrong report happens.
 - `branch` is read from HEAD's symref and never inferred. A bare mirror has one too (verified), and
   `main` is never assumed to be the default branch (product rule 6).
+
+### CON-06 — done; the budget had an ordering bug worth remembering
+
+Bounding evidence turned out to be the easy half. The hard half was *who gets the budget*: spending
+it first-come let `package-lock.json` take 400 of 4000 lines and starve every file later in the
+alphabet. Evidence selection depending on filename ordering is not a performance detail, it is a
+correctness problem for a governance tool (D-024).
+
+Also surfaced here and deferred deliberately:
+
+- **Privacy.** Evidence carries author and committer email addresses. Harmless locally; a disclosure
+  the moment an AI provider is wired up (D-003). Must be settled before, not after — see D-023.
+- **Copy detection stays off.** `-M` rename detection only; `-C` is more expensive and more
+  ambiguous. Stated rather than defaulted into.
+- **One `git diff` per file** rather than splitting a combined diff on `diff --git` boundaries.
+  Slower, but a filename containing that string cannot corrupt the split.
 
 ### CON-07 — blocked on CON-24
 

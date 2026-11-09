@@ -13,6 +13,7 @@ import sys
 from . import __version__
 from .config import build_request, build_snapshot_request
 from .errors import InvalidInput, RepositoryError
+from .evidence import collect_evidence, describe_commit
 from .git import (
     compare_revisions,
     discover_repository,
@@ -23,9 +24,8 @@ from .git import (
 PROG = "constat"
 DESCRIPTION = "Turn software changes into evidence-backed, human-approved knowledge."
 EPILOGUE = (
-    "Reports file-level changes and file inventories only. No evidence is "
-    "collected and nothing is classified or interpreted yet. See "
-    "PROJECT_STATUS.md."
+    "Reports file changes, commits and bounded evidence. Nothing is classified "
+    "or interpreted yet, and no report is rendered. See PROJECT_STATUS.md."
 )
 
 EXIT_OK = 0
@@ -126,6 +126,7 @@ def _run_analyse(args: argparse.Namespace) -> int:
         base = resolve_revision(repo, request.base)
         target = resolve_revision(repo, request.target)
         summary = compare_revisions(repo, base, target)
+        bundle = collect_evidence(repo, summary)
     except RepositoryError as exc:
         print(f"{PROG}: error: {exc}", file=sys.stderr)
         return EXIT_REPOSITORY
@@ -159,11 +160,29 @@ def _run_analyse(args: argparse.Namespace) -> int:
                 print(f"  {change.change_type.name:<12} {change.path}")
 
     print()
+    print(f"{bundle.commit_count} commit(s) in this range:")
+    for commit in bundle.commits:
+        merge = " [merge]" if commit.is_merge else ""
+        date = commit.authored_at.date().isoformat()
+        print(f"  {commit.short_sha}  {date}  {commit.author_name}{merge}")
+        print(f"              {commit.subject}")
+
+    print()
+    print("Evidence:")
+    print(f"  {bundle.completeness_note()}")
+    truncated = [e for e in bundle.excerpts if e.truncated and not e.is_binary]
+    if truncated:
+        print(f"  {len(truncated)} file(s) truncated:")
+        for excerpt in sorted(truncated, key=lambda e: -e.omitted_lines)[:5]:
+            kept = len(excerpt.text.splitlines())
+            print(f"    {kept} of {excerpt.total_lines} lines — {excerpt.path}")
+
+    print()
     # Says only what was established. Anything interpretive would be
-    # unsupported certainty (PRODUCT_SPEC.md rule 1): no evidence is collected
-    # and nothing has been classified.
-    print("File-level changes only. No evidence collected (CON-06) and no")
-    print("classification attempted (CON-08).")
+    # unsupported certainty (PRODUCT_SPEC.md rule 1): nothing has been
+    # classified and no report has been rendered.
+    print("Evidence collected but not classified (CON-08) and not rendered as a")
+    print("report (CON-09). Each excerpt records the command that regenerates it.")
     return EXIT_OK
 
 
@@ -178,17 +197,20 @@ def _run_snapshot(args: argparse.Namespace) -> int:
         repo = discover_repository(request.repo)
         revision = resolve_revision(repo, request.rev)
         state = summarise_state(repo, revision)
+        commit = describe_commit(repo, revision)
     except RepositoryError as exc:
         print(f"{PROG}: error: {exc}", file=sys.stderr)
         return EXIT_REPOSITORY
 
     _describe_repository(repo)
     print(f"revision:   {revision.symbolic} -> {revision.sha}")
+    print(f"authored:   {commit.authored_at.date().isoformat()} by {commit.author_name}")
+    print(f"subject:    {commit.subject}")
     print()
     print(f"{state.file_count} file(s) present at this revision.")
     print()
-    print("File inventory only. Nothing here describes behaviour yet: that")
-    print("needs evidence (CON-06) and interpretation (CON-09 onwards).")
+    print("File inventory and commit metadata only. Nothing here describes")
+    print("behaviour yet: that needs interpretation (CON-09 onwards).")
     return EXIT_OK
 
 

@@ -104,9 +104,9 @@ class TestAnalyseCommand:
         resemble a result (PRODUCT_SPEC.md rule 1)."""
         main(["analyse", "--repo", str(repo), "--base", "v1.0.0", "--target", "main"])
 
-        out = capsys.readouterr().out
-        assert "no evidence collected" in out.lower()
-        assert "no" in out.lower() and "classification attempted" in out.lower()
+        out = capsys.readouterr().out.lower()
+        assert "not classified" in out
+        assert "not rendered as a" in out
 
     def test_missing_repository_exits_three_not_two(self, tmp_path, capsys):
         """A well-formed command against a missing repository is a different
@@ -189,8 +189,8 @@ class TestSnapshotCommand:
     def test_output_does_not_claim_any_findings(self, repo, capsys):
         main(["snapshot", "--repo", str(repo), "--rev", "main"])
         out = capsys.readouterr().out.lower()
-        assert "file inventory only" in out
-        assert "nothing here describes behaviour yet" in out
+        assert "file inventory and commit metadata only" in out
+        assert "nothing here describes" in out
 
     def test_detached_head_is_reported_as_such(self, repo, capsys):
         """Never present a detached HEAD as if it were a branch."""

@@ -3,8 +3,8 @@
 > Constat turns software changes into evidence-backed, human-approved knowledge about how a
 > product behaves.
 
-**Status: pre-MVP, 5 of 20 sessions done.** The CLI reads a local Git repository, resolves
-revisions, and reports file-level changes or a file inventory. It does **not** yet collect evidence,
+**Status: pre-MVP, 6 of 20 sessions done.** The CLI reads a local Git repository, resolves
+revisions, and reports file changes, commits and bounded diff evidence. It does **not** yet
 classify anything, produce a report, or support review and baselines — see
 [BACKLOG.md](BACKLOG.md) for what exists and what does not.
 
@@ -93,8 +93,14 @@ verified. A range supplied backwards is refused rather than shown as "no changes
 `snapshot` lists the files present at a revision. It deliberately uses no change vocabulary: a
 state description must not label everything `ADDED` (D-022).
 
-No evidence is collected and nothing is classified yet. Every option is required: there are no
-defaults for inputs this important, and `--repo` never falls back to the current directory.
+Both commands collect evidence: commit metadata, and diff excerpts bounded at 400 lines per file
+and 4000 per comparison (D-023). Every excerpt records its true size, any omission and the reason
+for it, plus the exact `git` command that regenerates it in full — so bounding never makes Constat
+the only copy of the evidence. The budget is shared fairly across files rather than spent in path
+order, so a generated lockfile cannot starve a source file of its excerpt (D-024).
+
+Nothing is classified yet. Every option is required: there are no defaults for inputs this
+important, and `--repo` never falls back to the current directory.
 
 Run the tests:
 
@@ -105,7 +111,7 @@ Run the tests:
 > **On NixOS** there is no system-wide `pip`. The `venv` above supplies one via `ensurepip`, so the
 > commands work unchanged — just don't expect `pip install` to work outside the virtual environment.
 
-Evidence collection arrives in Session 06 and classification in Session 08; see
+Classification arrives in Session 08 and the first report in Session 09; see
 [PROJECT_STATUS.md](PROJECT_STATUS.md) and [BACKLOG.md](BACKLOG.md).
 
 ## Naming
