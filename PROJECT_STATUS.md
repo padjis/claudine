@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-09
 **Current phase:** Phase 2 — Evidence engine
-**Current session:** CON-32 — repository registry
+**Current session:** CON-33 — tickets and documents
 
 ---
 
@@ -293,21 +293,58 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-**CON-33 — tickets and documents.** A ticket can be opened and owns exactly one living document.
-**Done when:** `ticket add` creates a ticket and its document; both survive a restart; a second
-document for the same ticket is impossible.
+**CON-34 — operations against the set.** An operation gathers evidence for a ticket across every
+registered repository and expands the ticket's document.
+**Done when:** running an operation on a ticket produces a document containing evidence from each
+repository where its work was found.
 
 Scope:
 
-- `constat ticket add <reference> [--title]`, `ticket list`, `ticket show <reference>`.
-- Creating a ticket creates its document in the same transaction. A ticket without a document
-  would be a state the model does not allow (D-029), so it must not be reachable even briefly.
-- The document starts empty. Operations fill it at CON-34.
+- `constat document <ticket>` runs the operation across the registered set.
+- For each repository: resolve the ticket's commit set (D-030, D-031), collect evidence for those
+  commits with the existing collector, and append to the document.
+- Record the operation itself — what ran, against which repository, when, what it contributed.
+  Without that the document is unattributable prose.
+- The document must state which repositories were searched and found nothing, not only those that
+  matched. Silence about a repository is indistinguishable from "no changes there".
 
-One thing to settle: **what a reference is allowed to be.** `622`, `CON-04`, `ABC-123` and
-`repo#617` all appear in the real subjects. Resolution (D-030) matches commits against it, so the
-format affects matching. Probably: store it verbatim, and let the matching patterns be configured
-per repository rather than constraining the reference itself.
+One thing to settle: **evidence for a commit set is not a two-revision diff.** The existing
+collector takes a `ChangeSummary` from `compare_revisions`. A commit set needs either the union of
+the individual commit diffs, or a synthetic range. The union is more honest but can double-count a
+file touched by several commits.
+
+---
+
+## CON-33 — done when: *a ticket owns exactly one living document* ✅
+
+| Item | Status |
+| --- | --- |
+| `constat ticket add / list / show` | ✅ |
+| Ticket and document created in one transaction | ✅ asserted no orphan is reachable |
+| A second document for one ticket is impossible | ✅ schema `UNIQUE` |
+| References stored verbatim — four shapes exist in the subjects | ✅ |
+| Attribution by branch name and by commit message (D-030) | ✅ |
+| Search window is everything ahead of mainline (D-031) | ✅ |
+| `pending` / `landed` / `not_found` kept distinct | ✅ |
+| The ref a commit was found on is recorded as evidence | ✅ |
+
+### Tests run
+
+```
+.venv/bin/python -m pytest  →  281 passed
+```
+
+33 new tests.
+
+### On the real subjects
+
+`ticket add 622` against Subject A reports **`landed`** — correctly, since every branch there is
+zero commits ahead of mainline. That is the honest answer rather than the convenient one, and it
+is why the fixture builds the `pending` shape itself.
+
+Token-boundary matching earned its place on real data: ticket 622 matched a commit whose *subject*
+never mentions it, because its body contains `(#622)`. The same pattern correctly refuses `6220`
+and `1622`.
 
 ---
 

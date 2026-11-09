@@ -418,3 +418,85 @@ class TestRepoCommands:
         with pytest.raises(SystemExit):
             main(["--workspace", ws, "repo"])
         assert "add" in capsys.readouterr().out
+
+
+class TestTicketCommands:
+    def _ws(self, tmp_path):
+        target = str(tmp_path / "ws")
+        main(["--workspace", target, "init"])
+        return target
+
+    def test_add_creates_a_ticket_and_reports_the_search(self, tmp_path, capsys):
+        ws = self._ws(tmp_path)
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "ticket", "add", "622", "--title", "T"]) == 0
+        out = capsys.readouterr().out
+        assert "opened ticket: 622" in out
+        assert "document: created, empty" in out
+        assert "No repositories registered" in out
+
+    def test_add_is_refused_twice(self, tmp_path, capsys):
+        ws = self._ws(tmp_path)
+        main(["--workspace", ws, "ticket", "add", "622"])
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "ticket", "add", "622"]) == 4
+        assert "already exists" in capsys.readouterr().err
+
+    def test_list_and_show(self, tmp_path, capsys):
+        ws = self._ws(tmp_path)
+        main(["--workspace", ws, "ticket", "add", "622", "--title", "Prune"])
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "ticket", "list"]) == 0
+        assert "Prune" in capsys.readouterr().out
+
+        assert main(["--workspace", ws, "ticket", "show", "622"]) == 0
+        assert "document: empty" in capsys.readouterr().out
+
+    def test_show_an_unknown_ticket_exits_four(self, tmp_path, capsys):
+        ws = self._ws(tmp_path)
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "ticket", "show", "nope"]) == 4
+        assert "no ticket" in capsys.readouterr().err
+
+    def test_pending_work_is_reported_as_ahead_of_mainline(self, tmp_path, repo, capsys):
+        """The case D-031 expects: merged outside mainline."""
+        ws = self._ws(tmp_path)
+        clone = tmp_path / "clone"
+        git(tmp_path, "clone", "--quiet", str(repo), str(clone))
+        git(clone, "checkout", "--quiet", "-b", "develop")
+        (clone / "x.txt").write_text("x\n")
+        git(clone, "add", "x.txt")
+        git(clone, "commit", "-m", "Change a rule (#77)")
+        git(clone, "checkout", "--quiet", "main")
+
+        main(["--workspace", ws, "repo", "add", str(clone), "--name", "s"])
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "ticket", "add", "77"]) == 0
+        out = capsys.readouterr().out
+        assert "ahead of main" in out
+        assert "staged ahead of mainline" in out
+
+    def test_landed_work_is_distinguished_from_nothing(self, tmp_path, repo, capsys):
+        ws = self._ws(tmp_path)
+        clone = tmp_path / "clone"
+        git(tmp_path, "clone", "--quiet", str(repo), str(clone))
+        (clone / "y.txt").write_text("y\n")
+        git(clone, "add", "y.txt")
+        git(clone, "commit", "-m", "Already shipped (#88)")
+
+        main(["--workspace", ws, "repo", "add", str(clone), "--name", "s"])
+        capsys.readouterr()
+
+        main(["--workspace", ws, "ticket", "add", "88"])
+        landed = capsys.readouterr().out
+        assert "already in main" in landed
+
+        main(["--workspace", ws, "ticket", "add", "99999"])
+        missing = capsys.readouterr().out
+        assert "no commits reference this ticket" in missing
+        assert "not that the ticket changed nothing" in missing

@@ -15,7 +15,8 @@ from .config import build_request, build_snapshot_request
 from .errors import InvalidInput, RepositoryError, WorkspaceError
 from .evidence import collect_evidence, describe_commit
 from .mapping import change_proposal, commit_record, state_proposal
-from .store import Registry, Workspace, database_path
+from .store import Registry, TicketStore, Workspace, database_path
+from .tickets import TicketStatus, find_ticket_commits
 from .git import (
     compare_revisions,
     discover_repository,
@@ -72,6 +73,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
+
+    ticket = subparsers.add_parser(
+        "ticket",
+        help="manage tickets and their documents",
+        description=(
+            "A ticket owns exactly one living document. Constat expects a "
+            "ticket's work to be already merged onto an integration or "
+            "release branch, but not yet in mainline."
+        ),
+    )
+    ticket_actions = ticket.add_subparsers(dest="ticket_action", metavar="ACTION")
+
+    ticket_add = ticket_actions.add_parser("add", help="open a ticket")
+    ticket_add.add_argument("reference", metavar="REF", help="e.g. 622, ABC-123")
+    ticket_add.add_argument("--title", metavar="TEXT")
+
+    ticket_actions.add_parser("list", help="list tickets")
+
+    ticket_show = ticket_actions.add_parser(
+        "show", help="show a ticket and where its work was found"
+    )
+    ticket_show.add_argument("reference", metavar="REF")
 
     repo = subparsers.add_parser(
         "repo",
@@ -192,6 +215,118 @@ def _run_init(args: argparse.Namespace) -> int:
     print("Created. It holds registered repositories, tickets and documents.")
     print("Nothing is registered yet: `repo add` arrives with CON-32.")
     return EXIT_OK
+
+
+def _report_matches(registry: Registry, reference: str) -> None:
+    """Say where a ticket's work was found, and distinguish the three answers.
+
+    "Not in mainline yet", "already landed" and "found nothing" are different
+    results (D-031) and must not be rendered alike.
+    """
+    entries = registry.list()
+    if not entries:
+        print("No repositories registered, so nothing was searched.")
+        return
+
+    pending = landed = missing = 0
+    for entry in entries:
+        try:
+            repo = discover_repository(entry.source)
+            match = find_ticket_commits(
+                repo, reference, entry.default_branch, alias=entry.alias
+            )
+        except RepositoryError as exc:
+            print(f"  {entry.alias}: could not search — {exc}")
+            continue
+
+        if match.status is TicketStatus.PENDING:
+            pending += 1
+            print(f"  {entry.alias}: {match.commit_count} commit(s) ahead of "
+                  f"{entry.default_branch}")
+            for commit in match.commits[:5]:
+                print(f"    {commit.sha[:12]} [{commit.attribution.value}] "
+                      f"{commit.subject[:58]}")
+            for ref in dict.fromkeys(r for c in match.commits for r in c.found_on):
+                print(f"    found on {ref}")
+        elif match.status is TicketStatus.LANDED:
+            landed += 1
+            print(f"  {entry.alias}: already in {entry.default_branch} "
+                  f"({match.commit_count} commit(s))")
+        else:
+            missing += 1
+            print(f"  {entry.alias}: no commits reference this ticket")
+
+    print()
+    if pending:
+        print(f"{pending} repository(ies) have work staged ahead of mainline.")
+    if landed:
+        print(
+            f"{landed} repository(ies) have this work already in mainline. That "
+            "is not the same as finding nothing, but it is outside the window "
+            "Constat expects (D-031)."
+        )
+    if missing and not pending and not landed:
+        print(
+            "Nothing matched this reference anywhere. That means the reference "
+            "matched no commits — not that the ticket changed nothing."
+        )
+
+
+def _run_ticket(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    if args.ticket_action is None:
+        parser.parse_args(["ticket", "--help"])
+        return EXIT_USAGE
+
+    try:
+        with Workspace.open(args.workspace) as workspace:
+            tickets = TicketStore(workspace)
+            registry = Registry(workspace)
+
+            if args.ticket_action == "add":
+                entry = tickets.add(args.reference, args.title)
+                print(f"opened ticket: {entry.reference}")
+                if entry.title:
+                    print(f"  title: {entry.title}")
+                print("  document: created, empty")
+                print()
+                print("Searching registered repositories:")
+                _report_matches(registry, entry.reference)
+                return EXIT_OK
+
+            if args.ticket_action == "list":
+                entries = tickets.list()
+                if not entries:
+                    print("No tickets. Open one with `ticket add`.")
+                    return EXIT_OK
+                print(f"{len(entries)} ticket(s):")
+                for entry in entries:
+                    suffix = f" — {entry.title}" if entry.title else ""
+                    print(f"  {entry.reference}{suffix}")
+                return EXIT_OK
+
+            if args.ticket_action == "show":
+                entry = tickets.find(args.reference)
+                if entry is None:
+                    print(
+                        f"{PROG}: error: no ticket {args.reference!r}.",
+                        file=sys.stderr,
+                    )
+                    return EXIT_WORKSPACE
+                document = tickets.document(entry.reference)
+                print(f"ticket:   {entry.reference}")
+                if entry.title:
+                    print(f"title:    {entry.title}")
+                print(f"document: {'empty' if document.is_empty else 'has content'}")
+                print()
+                print("Searching registered repositories:")
+                _report_matches(registry, entry.reference)
+                return EXIT_OK
+    except WorkspaceError as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_WORKSPACE
+
+    parser.error(f"unknown ticket action: {args.ticket_action}")
+    return EXIT_USAGE  # pragma: no cover
 
 
 def _run_repo(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
@@ -372,6 +507,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "repo":
         return _run_repo(args, parser)
+
+    if args.command == "ticket":
+        return _run_ticket(args, parser)
 
     if args.command == "analyse":
         return _run_analyse(args)

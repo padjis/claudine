@@ -8,6 +8,58 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-031 · 2026-11-10 · A ticket is expected to be merged, but not yet into mainline
+
+**Refines D-030.** The commit set is not searched across all of history; it is searched in the
+window between mainline and everything else.
+
+**Decision.** Constat expects a ticket's work to be **already implemented and merged** — onto an
+integration or release branch — but **not yet in mainline**. The commit set for ticket `T` is
+therefore:
+
+```
+commits reachable from any ref, excluding those reachable from mainline,
+that are attributable to T
+```
+
+In Git terms, `git log --all --not <mainline>`, filtered by the attribution rules in D-030.
+
+**Why this formulation rather than a configured integration branch.** Naming one integration
+branch per repository would need configuration, and would be wrong the moment work sits on a
+release branch instead of `develop`. "Reachable from anything, but not from mainline" describes
+the same window without naming it, and covers `develop`, `release/*` and a still-open ticket
+branch identically. Subject A has `develop` *and* seven release branches; Subject B has release
+branches and no `develop` at all, so no single configured name would have served both.
+
+**Consequences.**
+
+- **The search space is bounded and small.** Not "all 1130 commits" but "whatever is staged ahead
+  of mainline", which is the set a reviewer actually cares about.
+- **Three outcomes, which must not be conflated.** `unknown` is an acceptable result (product
+  rule 1), and so is "already landed":
+
+  | Outcome | Meaning |
+  | --- | --- |
+  | Commits found outside mainline | Documentable. This is the expected case. |
+  | Commits found, but only in mainline | Already landed. Not nothing — a different answer. |
+  | No commits anywhere | The reference matched nothing. Not "this ticket changed nothing". |
+
+- **`ticket add` warns rather than refuses** when the expected case does not hold. A ticket may
+  legitimately be registered before its repositories are, or before the attribution pattern is
+  tuned. Refusing would make a tuning problem look like a missing ticket.
+- **The ref a commit was found on is evidence and must be recorded.** "Found on
+  `refs/heads/develop`" and "found on an abandoned branch" are different provenance (product
+  rule 3), and only the first should carry weight.
+- Searching `--all` includes remote-tracking and stale refs, so an abandoned branch can
+  contribute. Recording the ref is what makes that visible rather than silently misleading.
+- This is the assumption that makes mainline-only (D-028) coherent: there is divergence to measure
+  precisely because the work has not reached mainline yet. Documenting *after* a mainline merge
+  falls back to the attribution rules alone.
+
+**Status.** accepted
+
+---
+
 ## D-030 · 2026-11-09 · A ticket resolves to a commit set; mainline stays the reference
 
 **Resolves CON-37.**

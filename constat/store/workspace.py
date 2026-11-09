@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -183,6 +184,21 @@ class Workspace:
 
     def execute(self, sql: str, parameters: tuple = ()) -> sqlite3.Cursor:
         return self._connection.execute(sql, parameters)
+
+    @contextmanager
+    def transaction(self):
+        """Run several statements atomically.
+
+        Needed where a half-finished write would leave a state the model does
+        not allow — a ticket without its document, for instance (D-029).
+        """
+        self._connection.execute("BEGIN")
+        try:
+            yield self
+        except Exception:
+            self._connection.execute("ROLLBACK")
+            raise
+        self._connection.execute("COMMIT")
 
     def close(self) -> None:
         self._connection.close()

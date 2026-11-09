@@ -110,8 +110,8 @@ first seven sessions assumed. The Git and evidence layers are unaffected.
 | --- | --- | --- | --- |
 | CON-31 | Workspace storage | A SQLite workspace persists across runs; schema versioned. | ✅ |
 | CON-32 | Repository registry | Repositories can be added, listed and removed; local paths and remote URLs both work. | ✅ local paths; remote URLs are CON-35 |
-| CON-33 | Tickets and documents | A ticket can be opened and owns exactly one living document. | ⬜ **next** |
-| CON-34 | Operations against the set | An operation gathers evidence for a ticket across every registered repository, measured against mainline, and expands the document. | ⬜ |
+| CON-33 | Tickets and documents | A ticket can be opened and owns exactly one living document. | ✅ |
+| CON-34 | Operations against the set | An operation gathers evidence for a ticket across every registered repository, measured against mainline, and expands the document. | ⬜ **next** |
 | CON-35 | Remote clone-and-cache | A remote URL is cloned into a local cache and read like any local repository; fetch time is recorded. | ⬜ |
 | CON-36 | Default-branch resolution | Each repository's default branch is resolved and stored, never assumed to be `main`. | ✅ delivered with CON-32 |
 | CON-37 | Merged-ticket semantics | A ticket whose work is already merged still produces a document rather than an empty one. | ✅ resolved by D-030; implementation lands with CON-34 |
@@ -137,6 +137,31 @@ attributable to the ticket, resolved from a branch name encoding it, commit-mess
 an explicit list. The branch-name signal (`feat/622-…`) is the better one where it exists:
 unambiguous, and independent of commit-message discipline, which only ~5% of Subject A's commits
 exercise.
+
+### CON-33 — the expected window, and the three answers
+
+D-031 narrowed the search: a ticket's work is expected to be **merged onto an integration or
+release branch but not yet in mainline**. That makes the search space `--all --not <mainline>` —
+bounded, and exactly the set a reviewer cares about — without needing an integration branch to be
+configured. Neither subject could have shared one name anyway: Subject A has `develop` plus seven
+release branches, Subject B has release branches and no `develop`.
+
+Three outcomes, deliberately not collapsed into "found / not found":
+
+| Status | Meaning |
+| --- | --- |
+| `pending` | Commits ahead of mainline. The expected case. |
+| `landed` | Already in mainline. Not nothing — a different answer. |
+| `not_found` | The reference matched no commits. Also not "changed nothing". |
+
+**The real subjects cannot exercise `pending`** — every branch in both is zero ahead of mainline —
+so the fixture builds that shape deliberately. Running `ticket add 622` against Subject A
+correctly reports `landed`, which is honest rather than convenient.
+
+Branch-name attribution proved its worth: ticket 700's commit in the fixture never mentions 700,
+only the branch does. And token-boundary matching found a genuine body reference on real data —
+`(#622)` inside a commit whose subject says nothing about the ticket — while refusing `6220` and
+`1622`.
 
 ### CON-32 — two refusals worth keeping
 

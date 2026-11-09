@@ -115,6 +115,37 @@ class RegisteredRepository(Frozen):
     unstated truncation (D-027)."""
 
 
+class Ticket(Frozen):
+    """A unit of work, owning exactly one document (D-029).
+
+    `reference` is stored verbatim. The real subjects contain `622`,
+    `ADR-0019`, `plans/0015` and `repo#617`, so constraining the format would
+    exclude references that already exist. Matching is the resolver's job
+    (D-030), not the schema's.
+    """
+
+    reference: str = Field(min_length=1)
+    title: str | None = None
+    created_at: datetime
+
+
+class Document(Frozen):
+    """The living draft for a ticket.
+
+    Mutable by design (D-029): operations append to it and humans edit it.
+    Authority comes only from a frozen version, never from the draft.
+    """
+
+    ticket_reference: str = Field(min_length=1)
+    body: str = ""
+    created_at: datetime
+    updated_at: datetime
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.body.strip()
+
+
 class ChangeSelection(Frozen):
     """A closed range: what `target` introduced relative to `base`."""
 
