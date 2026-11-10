@@ -36,8 +36,14 @@ constat = "constat.cli:main"
 Homepage = "https://tryconstat.com"
 Source = "https://github.com/padjis/constat"
 
-[tool.setuptools]
-packages = ["constat"]
+# Discovered rather than listed. An explicit list was the CON-46 defect: it
+# said `packages = ["constat"]`, so every subpackage was silently dropped from
+# the wheel while the editable development install kept importing from the
+# working tree. A list has to be remembered on every new subpackage, and
+# forgetting it produces a broken artefact rather than an error.
+[tool.setuptools.packages.find]
+include = ["constat*"]
+namespaces = false
 
 # Single source of truth for the version: constat/__init__.py.
 # Keeping it in one place means the CLI and the package metadata cannot drift.

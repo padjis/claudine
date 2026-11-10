@@ -19,6 +19,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .ai import Interpretation, Provider, redact
+from .ai import resolve as resolve_provider
 from .errors import RepositoryError
 from .evidence import DEFAULT_LIMITS, EvidenceBundle, ExcerptLimits, collect_evidence
 from .git.adapter import Repository, Revision, discover_repository, resolve_revision
@@ -61,6 +63,7 @@ class OperationResult:
     reference: str
     findings: tuple[RepositoryFindings, ...]
     body: str
+    interpretation: Interpretation | None = None
 
     @property
     def repositories_searched(self) -> int:
@@ -136,12 +139,74 @@ def _collect_repository(
     )
 
 
-def render(reference: str, findings: tuple[RepositoryFindings, ...]) -> str:
+def _render_rules(interpretation: Interpretation) -> list[str]:
+    """Render the rules section, which always appears.
+
+    An absent section would be read as "there are no rules here" — the one
+    thing Constat must never imply (product rule 1). So the section is
+    unconditional and its note carries the distinction between *no rules were
+    identified* and *no rules exist*.
+    """
+    lines = ["## Business rules", ""]
+
+    if not interpretation.identified_rules:
+        lines += [
+            interpretation.note
+            or "No rules were identified. That is not a statement that none exist.",
+            "",
+        ]
+        return lines
+
+    lines += [
+        f"{len(interpretation.proposals)} rule(s) proposed by "
+        f"{interpretation.describe()}. Every one is an interpretation, not a "
+        "finding: proposals carry no authority until a human accepts them "
+        "individually (D-036, D-039).",
+        "",
+    ]
+    for proposal in interpretation.proposals:
+        lines.append(f"### {proposal.name}")
+        lines.append("")
+        lines.append(f"{proposal.statement}")
+        lines.append("")
+        lines.append(f"Provenance: `{proposal.provenance.value}`.")
+        lines.append("")
+        if proposal.behaviours:
+            lines.append("Behaviours:")
+            lines.append("")
+            for behaviour in proposal.behaviours:
+                lines.append(f"- {behaviour.description}")
+            lines.append("")
+        if proposal.anchors:
+            lines.append("Anchors:")
+            lines.append("")
+            for anchor in proposal.anchors:
+                scope = f"{anchor.repository_alias}:" if anchor.repository_alias else ""
+                lines.append(f"- `{scope}{anchor.path_glob}`")
+            lines.append("")
+        else:
+            lines += [
+                "No anchors proposed, so this rule can never be matched to a "
+                "future change.",
+                "",
+            ]
+    return lines
+
+
+def render(
+    reference: str,
+    findings: tuple[RepositoryFindings, ...],
+    interpretation: Interpretation | None = None,
+) -> str:
     """Render the machine-derived part of a document.
 
     Every searched repository appears, including those that contributed
     nothing. Silence about a repository is indistinguishable from "no changes
     there", and the two are not the same claim.
+
+    `interpretation` is optional only so the evidence rendering stays callable
+    on its own. When it is absent the rules section is omitted entirely rather
+    than being rendered as empty, because an empty section is itself a claim.
     """
     lines: list[str] = [f"# Ticket {reference}", ""]
 
@@ -221,14 +286,24 @@ def render(reference: str, findings: tuple[RepositoryFindings, ...]) -> str:
             lines.append(bundle.completeness_note())
             lines.append("")
 
-    lines += [
-        "---",
-        "",
-        "Observed facts only. Nothing here is classified, interpreted or "
-        "approved: every excerpt records the command that regenerates it, and "
-        "this document carries no authority until a human approves a version "
-        "of it.",
-    ]
+    if interpretation is not None:
+        lines += _render_rules(interpretation)
+
+    lines += ["---", ""]
+    if interpretation is not None and interpretation.identified_rules:
+        lines.append(
+            "Evidence above is observed fact; the rules are "
+            "`ai_interpretation`. The two are kept separate on purpose "
+            "(product rule 3), and neither is approved: this document carries "
+            "no authority until a human approves a version of it."
+        )
+    else:
+        lines.append(
+            "Observed facts only. Nothing here is classified, interpreted or "
+            "approved: every excerpt records the command that regenerates it, "
+            "and this document carries no authority until a human approves a "
+            "version of it."
+        )
     return "\n".join(lines)
 
 
@@ -236,8 +311,18 @@ def gather(
     workspace: Workspace,
     reference: str,
     limits: ExcerptLimits = DEFAULT_LIMITS,
+    provider: Provider | None = None,
 ) -> OperationResult:
-    """Run the gathering operation for a ticket and expand its document."""
+    """Run the gathering operation for a ticket and expand its document.
+
+    The provider is resolved **before** any repository is read, so a
+    misconfiguration fails immediately rather than after the expensive part.
+    With none configured this is the null provider and nothing leaves the
+    machine.
+    """
+    if provider is None:
+        provider = resolve_provider()
+
     tickets = TicketStore(workspace)
     tickets.document(reference)  # raises NotRegistered if the ticket is unknown
 
@@ -245,7 +330,14 @@ def gather(
     findings = tuple(
         _collect_repository(entry, reference, limits) for entry in registry.list()
     )
-    body = render(reference, findings)
+
+    # Redaction happens on the real path rather than only where a provider
+    # exists. A privacy boundary first exercised by the code that needs it is
+    # a boundary first tested in production.
+    payload = redact(reference, findings)
+    interpretation = provider.interpret(payload)
+
+    body = render(reference, findings, interpretation)
 
     document_id = workspace.execute(
         "SELECT d.id FROM document d JOIN ticket t ON t.id = d.ticket_id "
@@ -276,4 +368,9 @@ def gather(
                 ),
             )
 
-    return OperationResult(reference=reference, findings=findings, body=body)
+    return OperationResult(
+        reference=reference,
+        findings=findings,
+        body=body,
+        interpretation=interpretation,
+    )

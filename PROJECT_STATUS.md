@@ -1,8 +1,8 @@
 # Project status
 
-**Last updated:** 2026-11-09
-**Current phase:** Phase 2 — Evidence engine
-**Current session:** CON-34 — operations against the set
+**Last updated:** 2026-11-10
+**Current phase:** Phase 3 — Meaning and reporting (reshaped by D-035 … D-039)
+**Current session:** CON-42 — rule generation (CON-40, CON-41 and CON-46 closed)
 
 ---
 
@@ -11,8 +11,15 @@
 The repository is public at `https://github.com/padjis/constat`. Session 01 was committed and
 pushed as `b092b62`.
 
-Both commands now emit a validated, versioned `Proposal` — available as JSON via `--json`. Nothing
-is classified and no Markdown report is rendered yet: Sessions 08 and 09.
+A workspace now persists repositories, tickets, living documents and a rule catalogue. A ticket
+reference gathers evidence across every registered repository (CON-34) and the catalogue reports
+which changed paths no rule claims (CON-40).
+
+**No rules are produced yet, and nothing deterministic can produce them** — D-035 settled that a
+rule is a business statement no code signal yields, and D-039 made generation an AI pass. CON-41
+built the seam for it: the provider registry is deliberately empty, nothing leaves the machine, and
+the document states that no rules were *identified* rather than implying none exist. Generation is
+CON-42. No Markdown report is rendered yet: CON-09.
 
 **Q1 is closed.** All ten original open questions from Session 01 are now resolved.
 
@@ -263,6 +270,22 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ### Known issues / open items
 
+- **Personal data in evidence: settled (D-040).** Identity does not cross the provider boundary at
+  all — no names, no addresses, no timestamps, and the payload type has no field for them. The
+  obligation D-023 recorded is discharged, before any provider exists.
+- **A built wheel was broken, and is fixed (CON-46, D-042).** `packages = ["constat"]` dropped every
+  subpackage from the wheel from CON-04 onwards, unnoticed because the development install is
+  editable. Now discovered rather than listed, with `tests/test_packaging.py` building a wheel and
+  importing from it.
+- **Secret scanning is not solved (CON-45).** Commit messages and diffs do leave the machine once a
+  provider is configured, and a leaked credential in a diff would be sent with everything else.
+  Should land with or before CON-42.
+- **The AI cost is now a measured number, not an estimate.** 8 commits in one repository produce a
+  ~47,000-token payload. The registered set is plural by construction, so this scales the wrong
+  way, and CON-42 must treat payload size as a design constraint.
+- **CON-39 blocks review.** The document body is regenerated on every run. Safe only while it is
+  entirely machine-derived; the moment a reviewer can edit it (CON-12, CON-44), regeneration
+  destroys their work.
 - **`.venv/` is gitignored and must be recreated per clone** — see the README. On NixOS there is no
   system pip; `python3 -m venv` supplies one via `ensurepip`.
 - **SSH to GitHub does not work from this machine.** The key at `~/.ssh/id_rsa` is 2048-bit RSA,
@@ -293,7 +316,197 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-See the direction note below: the document's *content* is being redefined.
+**CON-42 — rule generation.** An AI pass proposes rules, behaviours and anchors from a ticket's
+evidence, all as `ai_interpretation`. The seam, the payload and the no-provider path exist; what is
+missing is a provider in the registry and a prompt.
+
+Before writing it, two things CON-41 measured should shape the design rather than surprise it:
+
+1. **Payload size is a design constraint, not a detail.** 8 commits in *one* repository produced
+   ~47,000 tokens. D-039 called the cost real; that is the number. The registered set is plural by
+   construction (D-027), so this scales the wrong way.
+2. **CON-45 (secret scanning) should land with or before it.** Identity no longer crosses the
+   boundary, but a leaked credential in a diff would be sent as readily as anything else.
+
+And the standing reminder: validation is still at **zero discovery conversations** (CON-26). CON-42
+is where this project starts paying a provider, with nobody yet asked whether they want the output.
+
+---
+
+## CON-46 — done when: *a built wheel contains the package and imports* ✅
+
+| Item | Status |
+| --- | --- |
+| `pyproject.toml` — discovery instead of an explicit `packages` list | ✅ D-042 |
+| `tests/test_packaging.py` — configuration, wheel contents, wheel import | ✅ 6 tests |
+| Every package directory on disk is asserted to match an include pattern | ✅ walks the tree, no hardcoded list |
+
+Found while verifying CON-41's "no new dependency" claim, not while looking for it. From CON-04
+onwards the wheel contained nine modules and no subpackages at all; a wheel install would have
+failed at the first `from .store import …`. Invisible for five tickets because the development
+install is editable and imports from the working tree.
+
+### The test was harder than the fix, and twice gave a false pass
+
+The fix is one line. Making it *provable* took two attempts, and both failures made a broken wheel
+look fine — which is why they are written down in D-042 rather than left in a commit message:
+
+| False pass | Why |
+| --- | --- |
+| In-tree build | setuptools stages into `build/` and never cleans it, so earlier builds' modules are included regardless of configuration. With the defect restored, an in-tree build still produced a **complete** wheel. |
+| Import probe | The editable install's `.pth` meta path finder claims `constat.*` from the working tree, ahead of `sys.path`. The probe loaded `cli` from the wheel and `store` from the repository, passing against a wheel with no `store` in it. |
+
+Now the wheel is built from a staged copy of the source, and the probe runs with `-S` so `.pth`
+files are skipped and the unpacked wheel is the only `constat` available.
+
+**Mutation-checked:** with the explicit list restored, 5 of the 6 tests fail.
+
+### Tests run
+
+```
+.venv/bin/python -m pytest  →  403 passed in 41.85s
+```
+
+---
+
+## CON-41 — done when: *a provider can be configured; absent one, no rules were identified* ✅
+
+| Item | Status |
+| --- | --- |
+| `constat/ai/provider.py` — `Provider` protocol, `Interpretation`, `NullProvider` | ✅ |
+| `constat/ai/redaction.py` — the privacy boundary (D-040) | ✅ |
+| `constat/ai/settings.py` — provider resolved from the environment, registry empty | ✅ |
+| `RuleProposal` in `models.py`, provenance pinned to `ai_interpretation` | ✅ cannot be relabelled |
+| The document's rules section, always present | ✅ `## Business rules` |
+| "No rules were identified" never written as "none exist" | ✅ asserted on the wording |
+| Credentials from the environment only, never stored | ✅ workspace records provider, not key |
+| A misconfigured provider is refused, not nulled (D-041) | ✅ exit code 5 |
+| The provider resolves **before** any repository is read | ✅ test watches the collector |
+| `ticket add` reports the rules state too | ✅ it gathers, so it must say |
+| No new dependency, no HTTP, no API call | ✅ `dependencies` unchanged |
+
+### Tests run
+
+```
+.venv/bin/python -m pytest  →  397 passed in 37.94s
+```
+
+57 new tests. The existing 340 needed no changes.
+
+### Mutation-checked, because a privacy test that cannot fail is worthless
+
+Two deliberate regressions were introduced and the suite re-run:
+
+| Regression | Result |
+| --- | --- |
+| `scrub_message` and `scrub_diff` turned into identity functions | **6 tests failed** |
+| Provider resolution moved after evidence collection | **1 test failed** |
+
+The second one is the reason that test watches `_collect_repository` rather than the document: the
+document is written at the end either way, so asserting on it would have passed while the
+regression shipped.
+
+### Verified against the real subjects
+
+Both subjects registered; `ticket add 622` and `ADR-0019` report `landed` / `not_found` with the
+rules section present and honest. `CONSTAT_AI_PROVIDER=anthropic` exits **5** and names what is
+available, rather than quietly producing an empty rule section.
+
+For a payload with real content, Subject B was cloned and its last 8 commits made pending ahead of
+mainline:
+
+| Measure | Value |
+| --- | --- |
+| Commits in the payload | 8 |
+| Files | 33 |
+| Payload size | 186,636 chars (~47,000 tokens) |
+| Address-shaped strings surviving | **0** |
+| Author/committer fields on the payload type | **none exist** |
+
+### Two honest limits
+
+**The masking paths were not exercised by real data.** That range needed zero redactions —
+identity was absent *structurally*, because the type has nowhere to put it. The trailer-stripping
+and diff-masking code was exercised only by fixtures. It rests on anticipating the case, the same
+way D-021 rests on asking the right question rather than on an observed discrepancy.
+
+**Secret scanning is not solved and is not claimed to be.** Commit messages and diffs do leave the
+machine — that is the product — but a payload containing a leaked credential would be sent as
+readily as anything else. Raised as **CON-45**, to land with or before CON-42.
+
+### A wrinkle left behind
+
+`ticket add` gathers, so a provider fault there leaves the ticket open with an empty document. It
+is recoverable — `constat document <ref>` once the environment is fixed — and consistent with the
+living-document model (D-029), but it is not transactional in the way CON-33's ticket-and-document
+creation is.
+
+---
+
+## CON-40 — done when: *rules, behaviours and anchors persist and report coverage* ✅
+
+Committed as `b576795`.
+
+| Item | Status |
+| --- | --- |
+| `constat/store/catalogue.py` — `Catalogue` | ✅ |
+| `rule` / `behaviour` / `anchor` tables; schema v3 with a v2→v3 migration | ✅ |
+| `Rule`, `Behaviour`, `Anchor` in `constat/models.py` | ✅ |
+| `constat rule add / behaviour / anchor / list / show / remove` | ✅ |
+| Rules matched to changed paths by anchor glob | ✅ `rules_matching` |
+| Paths claimed by **no** rule reported explicitly | ✅ `unmatched_paths` |
+| A rule with no anchors says so — it can never be matched | ✅ stated in `rule show` |
+| Generated rules carry `ai_interpretation`, not `requirement_ref` | ✅ corrected by D-039 |
+
+### Tests run
+
+```
+.venv/bin/python -m pytest  →  340 passed in 16.42s
+```
+
+30 new tests (24 catalogue, 6 CLI), plus the v2→v3 migration covered in `tests/test_workspace.py`.
+
+### The rule model settled here, over six decisions in one day
+
+This was the session where the rule model stopped being a code problem. The sequence matters:
+
+- **D-035** — a rule is a *business statement*; a behaviour is *a way the app handles a business
+  case*. Neither can be read out of code. That is what made every code-signal approach a dead end,
+  not an implementation difficulty.
+- **D-034** — feature flags removed. A flag is a *control over* behaviour, not a statement of it,
+  and its live value is not even in the repository.
+- **D-038** — SQL migrations removed for the same reason, dissolving D-010's "deterministic spine"
+  entirely. A migration is at most *evidence that* a rule exists.
+- **D-036** — rejection means **inconclusive** (another PR is expected), not "the write-up is
+  wrong" and not "this must never ship".
+- **D-037** — accepted rules migrate into the baseline. This unifies CON-14, CON-15 and drift:
+  `NEW` and `CHANGED` are relative to what has been *approved*, not to what exists.
+- **D-039** — rules are generated and maintained by AI, reversing D-038's authorship the same day
+  it was taken.
+
+### The reversal is the entry worth re-reading
+
+D-038 chose a hand-declared catalogue to avoid API cost before validation. D-039 reversed it
+hours later, and the reason is not convenience: a hand-maintained catalogue contains only the
+rules someone remembered to declare, and drifts from the code **by construction** — the exact
+disease this product treats. The `rule` CLI commands survive as a bootstrap and test path, which
+is how the catalogue is exercised with no provider configured. They are not the intended way to
+author rules, and the command help says so.
+
+### What this costs, stated rather than discovered later
+
+D-039 is the roadmap's top risk made concrete. The plan says postpone AI API calls until the
+workflow is validated, and validation stands at **zero discovery conversations** (CON-26).
+Evidence is already 2000–4000 diff lines per range per repository. Proceeding is a deliberate
+choice.
+
+### The functions that matter most
+
+`unmatched_paths`. A catalogue only knows the rules it holds, and an AI pass will miss rules too,
+so changed files claimed by no rule must stay prominent rather than being quietly absent. Coverage
+reporting is the thing that keeps an incomplete catalogue honest.
+
+---
 
 ## CON-34 — done when: *an operation produces a document with evidence from each repository* ✅
 
@@ -448,21 +661,21 @@ legal and validation work (`CON-21` onwards) and the per-ticket design notes.
 | 01 | Create the repository and working agreement | A documented empty project with clear scope and rules. | ✅ `b092b62` |
 | 02 | Create the Python project skeleton | The CLI installs and runs locally; tests execute. | ✅ |
 | 03 | Add configuration and input validation | Helpful errors; no silent defaults for important inputs. | ✅ |
-| 04 | Read a local Git repository | Tests cover valid, invalid and missing repositories/revisions. | ⬜ |
+| 04 | Read a local Git repository | Tests cover valid, invalid and missing repositories/revisions. | ✅ `184fa0b` |
 
 ### Phase 2 — Evidence engine (sessions 5–7)
 
 | # | Session | Done when | Status |
 | --- | --- | --- | --- |
-| 05 | Compare two revisions | A deterministic change summary for two revisions. | ⬜ |
-| 06 | Collect inspectable evidence | Evidence records can be traced back to Git. | ⬜ |
-| 07 | Define the change data model | Stable, tested structured output. | ⬜ |
+| 05 | Compare two revisions | A deterministic change summary for two revisions. | ✅ `6e3b07d` |
+| 06 | Collect inspectable evidence | Evidence records can be traced back to Git. | ✅ `eb957b6` |
+| 07 | Define the change data model | Stable, tested structured output. | ✅ `24d3746` — top-level object revised by D-029 |
 
 ### Phase 3 — Meaning and reporting (sessions 8–11)
 
 | # | Session | Done when | Status |
 | --- | --- | --- | --- |
-| 08 | Classify changes conservatively | Classification never pretends to know business intent from a filename alone. | ⬜ |
+| 08 | ~~Classify changes conservatively~~ | — | 🔁 **superseded by CON-40…43.** Classification by code signal was dissolved: D-034 removed flags, D-038 removed migrations, D-035 established that a rule is a business statement no signal can produce. |
 | 09 | Generate the first report | A developer can understand the report without reading raw command output. | ⬜ |
 | 10 | Separate facts from interpretation | Every claim has a provenance type; unsupported claims are visibly uncertain. | ⬜ |
 | 11 | Strengthen quality with tests | The report remains safe and useful across realistic Git cases. | ⬜ |
@@ -496,7 +709,7 @@ legal and validation work (`CON-21` onwards) and the per-ticket design notes.
 | 2 | Add the project charter, product specification and working agreement. | ✅ |
 | 3 | Have Claude Code review the documents, identify ambiguities and propose a small architecture. **Do not implement.** | ✅ 10 ambiguities recorded in `PRODUCT_SPEC.md` § 11; architecture proposed in `ARCHITECTURE.md` |
 | 4 | Choose the first sample Git repository. Prefer a small project you own and can safely analyse. | ✅ Subjects A and B — D-009 |
-| 5 | Agree on the first CLI command and its acceptance criteria. | ⬜ **next decision needed** |
+| 5 | Agree on the first CLI command and its acceptance criteria. | ✅ Session 03 — every command has stated acceptance criteria |
 | 6 | Implement the CLI skeleton and tests. | ✅ Session 02 |
 | 7 | Review the result, update project status, conduct the first two discovery conversations. | ⬜ |
 

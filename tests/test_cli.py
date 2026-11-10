@@ -554,6 +554,79 @@ class TestDocumentCommand:
         assert main(["--workspace", ws, "document", "nope"]) == 4
         assert "no ticket" in capsys.readouterr().err
 
+    def test_it_says_no_rules_were_identified_and_why(self, tmp_path, capsys):
+        """CON-41's done-when at the surface a user actually sees.
+
+        The summary must not let "no rules" read as "nothing is governed
+        here" — it is a fact about configuration, and it says so.
+        """
+        ws = self._setup(tmp_path)
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "document", "622"]) == 0
+        out = capsys.readouterr().out
+        assert "no rules identified" in out
+        assert "no AI provider is configured" in out
+        assert "not about the code" in out
+
+    def test_the_document_carries_the_rules_section(self, tmp_path, capsys):
+        ws = self._setup(tmp_path)
+        capsys.readouterr()
+
+        main(["--workspace", ws, "document", "622", "--show"])
+        body = capsys.readouterr().out
+        assert "## Business rules" in body
+        assert "may well exist" in body
+
+    def test_an_unimplemented_provider_exits_five(self, tmp_path, capsys, monkeypatch):
+        """A provider fault gets its own exit code.
+
+        Reusing 3 or 4 would tell the user to check a repository or their
+        workspace, and both are fine — the environment is not.
+        """
+        ws = self._setup(tmp_path)
+        monkeypatch.setenv("CONSTAT_AI_PROVIDER", "openai")
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "document", "622"]) == 5
+        assert "does not implement" in capsys.readouterr().err
+
+    def test_ticket_add_also_reports_the_rules_state(self, tmp_path, capsys):
+        """`ticket add` gathers too.
+
+        A user who only ever opens tickets would otherwise never be told that
+        no rules were identified, and silence reads as "there are none".
+        """
+        ws = str(tmp_path / "ws")
+        main(["--workspace", ws, "init"])
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "ticket", "add", "900"]) == 0
+        assert "no rules identified" in capsys.readouterr().out
+
+    def test_ticket_add_exits_five_on_a_provider_fault(
+        self, tmp_path, capsys, monkeypatch
+    ):
+        ws = str(tmp_path / "ws")
+        main(["--workspace", ws, "init"])
+        monkeypatch.setenv("CONSTAT_AI_PROVIDER", "openai")
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "ticket", "add", "901"]) == 5
+        assert "does not implement" in capsys.readouterr().err
+
+    def test_the_provider_exit_code_is_distinct(self):
+        """Guard against a future edit collapsing the codes."""
+        from constat.cli import (
+            EXIT_PROVIDER,
+            EXIT_REPOSITORY,
+            EXIT_USAGE,
+            EXIT_WORKSPACE,
+        )
+
+        codes = {EXIT_USAGE, EXIT_REPOSITORY, EXIT_WORKSPACE, EXIT_PROVIDER}
+        assert len(codes) == 4
+
 
 class TestRuleCommands:
     def _ws(self, tmp_path):

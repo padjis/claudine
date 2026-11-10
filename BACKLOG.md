@@ -101,8 +101,10 @@ forces them.
 | CON-29 | Ticket-scoped documentation (`constat document <ref>`) | A proposal can be initialised from a reference found in commit messages, across one or more repositories. | 🔁 **promoted** — now the primary workflow, delivered by CON-33/34 |
 | CON-39 | Regeneration must not destroy human edits | Re-running an operation preserves what a reviewer wrote. | ⬜ **blocks CON-12** |
 | CON-40 | Rule catalogue storage | Rules, behaviours and anchors persist and report coverage. | ✅ |
-| CON-41 | AI provider interface | A provider can be configured; absent one, Constat reports evidence and states that no rules were identified. | ⬜ **next** |
-| CON-42 | Rule generation | An AI pass proposes rules, behaviours and anchors from a ticket's evidence, all as `ai_interpretation`. | ⬜ |
+| CON-41 | AI provider interface | A provider can be configured; absent one, Constat reports evidence and states that no rules were identified. | ✅ D-040, D-041 |
+| CON-42 | Rule generation | An AI pass proposes rules, behaviours and anchors from a ticket's evidence, all as `ai_interpretation`. | ⬜ **next** — first real API cost; see CON-45 |
+| CON-45 | Secret scanning before the payload leaves | A payload containing a credential is refused rather than sent. | ⬜ **should land with or before CON-42** |
+| CON-46 | A built wheel actually contains the package | Installing the wheel and importing the CLI works, asserted by a test. | ✅ D-042 — discovery replaces the explicit list; `tests/test_packaging.py` builds a wheel and imports from it |
 | CON-43 | Rule maintenance | Evidence contradicting a baselined rule proposes an update to it rather than a duplicate. | ⬜ hardest part of D-039 |
 | CON-44 | Per-rule review decisions | A reviewer accepts rule changes individually or rejects the implementation as inconclusive, with comments. | ⬜ needs CON-39 first |
 | CON-30 | ~~Surface near-duplicate proposals~~ | — | ❌ **withdrawn.** The problem was an artefact of proposal-per-run; D-029's one-document-per-ticket model does not have it. |
@@ -126,6 +128,65 @@ first seven sessions assumed. The Git and evidence layers are unaffected.
 ---
 
 ## Notes on specific tickets
+
+### CON-41 — the interface was the easy part
+
+Done. The `Protocol` and the null provider took an afternoon's worth of thought; the two
+prohibitions around them are the ticket's actual content.
+
+**Identity does not cross the boundary (D-040).** D-023 had deferred this and required it settled
+before a provider existed. Settled the stronger way: the payload type has no field for an author,
+so the guarantee is structural rather than a stripping step someone can forget. The non-obvious
+half is free text — commit trailers are entirely a person, and a changed `AUTHORS` file puts
+addresses in the diff itself. Messages lose the trailer line; diffs keep every line and mask the
+address, because dropping a diff line would misstate the change.
+
+**A misconfiguration is refused, never nulled (D-041).** Graceful degradation here means emitting
+"no rules were identified" to someone who configured a provider. Exit code 5.
+
+**Two honest limits.**
+
+- On 8 real commits from Subject B, no masking was needed at all: identity was absent
+  structurally, and the trailer and diff-masking paths were exercised only by fixtures. They rest
+  on anticipating the case, not on having observed it.
+- **Secret scanning is not solved.** Commit messages and diffs do leave the machine — that is the
+  product — but a payload containing a leaked credential would be sent as readily as anything
+  else. Raised as CON-45 rather than left implicit.
+
+**The cost is now measurable, not estimated.** 8 commits in one repository produced a 186,636-char
+payload — roughly 47,000 tokens, for one ticket in one repository. D-039 called the cost real; this
+is the number. CON-42 should treat payload size as a design constraint rather than discover it on a
+bill.
+
+### CON-46 — found while checking a claim, not while looking for it
+
+CON-41 claimed "no new dependency" and the check was to build a wheel and look inside it. The wheel
+contains nine modules and **no subpackages at all** — `constat/git`, `constat/store`,
+`constat/evidence` and `constat/ai` are all missing, because `pyproject.toml` says
+`packages = ["constat"]` and setuptools takes that literally.
+
+Nothing has noticed because the development install is editable and imports from the working tree.
+A built wheel would fail on `import constat.cli`, at the first `from .store import …`.
+
+Pre-existing since CON-04 added the first subpackage.
+
+**Fixed (D-042).** The list became a `find` directive, so a subpackage added in a later ticket is
+shipped without anyone remembering to extend a list.
+
+**The test was harder than the fix, and twice gave a false pass.** Both failures are worth
+remembering, because both made a broken wheel look fine:
+
+1. **Stale `build/lib`.** setuptools stages into `build/` and never cleans it, so a module that
+   landed there during an earlier build is included in every later wheel regardless of
+   configuration. With the defect deliberately restored, an in-tree build still produced a
+   *complete* wheel. The test now builds from a staged copy of the source.
+2. **The editable install backfills missing modules.** It registers a meta path finder via a
+   `.pth` file which claims `constat.*` from the working tree, ahead of `sys.path`. The import
+   probe loaded `cli` from the wheel and `store` from the repository and passed against a wheel
+   with no `store` in it at all. The probe now runs with `-S`, so `.pth` files are skipped and the
+   unpacked wheel is the only `constat` available.
+
+Mutation-checked: with the explicit list restored, five of the six tests fail.
 
 ### CON-37 — resolved by measurement, not by argument (D-030)
 

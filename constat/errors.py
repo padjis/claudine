@@ -38,6 +38,34 @@ class WorkspaceVersionError(WorkspaceError):
     """
 
 
+class ProviderError(ConstatError):
+    """An AI provider could not be resolved or used.
+
+    Distinct from every other kind: the input was fine, the repositories were
+    fine and the workspace was fine — the interpretation layer was not. Kept
+    separate so "no rules were identified" can never be reported for a
+    configuration fault (product rule 1).
+    """
+
+
+class UnknownProvider(ProviderError):
+    """A provider was named that this version of Constat does not implement.
+
+    Refused rather than falling back to the null provider. A silent fallback
+    would emit "no rules were identified" to someone who believed they had
+    configured a provider — a confidently wrong empty result, which is the
+    exact failure this product exists to avoid.
+    """
+
+
+class ProviderNotConfigured(ProviderError):
+    """A provider was named but its credentials are absent from the environment.
+
+    Also refused rather than silently nulled, for the same reason. Credentials
+    are read from the environment only and never stored in the workspace.
+    """
+
+
 class RepositoryError(ConstatError):
     """The repository or a revision within it could not be read.
 

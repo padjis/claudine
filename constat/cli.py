@@ -12,7 +12,7 @@ import sys
 
 from . import __version__
 from .config import build_request, build_snapshot_request
-from .errors import InvalidInput, RepositoryError, WorkspaceError
+from .errors import InvalidInput, ProviderError, RepositoryError, WorkspaceError
 from .evidence import collect_evidence, describe_commit
 from .mapping import change_proposal, commit_record, state_proposal
 from .store import Catalogue, Registry, TicketStore, Workspace, database_path
@@ -36,6 +36,7 @@ EXIT_OK = 0
 EXIT_USAGE = 2  # argparse's own convention for a usage error; reused for bad input.
 EXIT_REPOSITORY = 3  # the input was fine; the repository or revision was not.
 EXIT_WORKSPACE = 4  # Constat's own stored state could not be opened or created.
+EXIT_PROVIDER = 5  # the interpretation layer was misconfigured; nothing else was.
 
 
 def _describe_repository(repo) -> None:
@@ -353,6 +354,31 @@ def _run_rule(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     return EXIT_USAGE  # pragma: no cover
 
 
+def _print_interpretation(interpretation) -> None:
+    """Report the rules outcome of a run.
+
+    Shared by `document` and `ticket add`, which both gather. A user who only
+    ever runs `ticket add` would otherwise never be told that no rules were
+    identified, and would reasonably read the silence as "there are none".
+    """
+    if interpretation is None:
+        return
+
+    if interpretation.identified_rules:
+        print(
+            f"  {len(interpretation.proposals)} rule(s) proposed by "
+            f"{interpretation.describe()} — proposals, not findings"
+        )
+    elif interpretation.ran:
+        print(
+            f"  no rules identified by {interpretation.describe()} — "
+            "not a finding that none exist"
+        )
+    else:
+        print("  no rules identified — no AI provider is configured")
+        print("  (that is a statement about configuration, not about the code)")
+
+
 def _run_document(args: argparse.Namespace) -> int:
     try:
         with Workspace.open(args.workspace) as workspace:
@@ -360,6 +386,9 @@ def _run_document(args: argparse.Namespace) -> int:
     except WorkspaceError as exc:
         print(f"{PROG}: error: {exc}", file=sys.stderr)
         return EXIT_WORKSPACE
+    except ProviderError as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_PROVIDER
     except RepositoryError as exc:
         print(f"{PROG}: error: {exc}", file=sys.stderr)
         return EXIT_REPOSITORY
@@ -376,6 +405,8 @@ def _run_document(args: argparse.Namespace) -> int:
     for finding in result.findings:
         detail = finding.error or f"{len(finding.commits)} commit(s)"
         print(f"    {finding.repository.alias}: {finding.status.value} — {detail}")
+
+    _print_interpretation(result.interpretation)
     print()
     print("Use --show to print the document. It is a draft: nothing here is")
     print("approved, and approval is a separate, explicit step.")
@@ -409,6 +440,7 @@ def _run_ticket(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
                         f"    {finding.repository.alias}: "
                         f"{finding.status.value} — {detail}"
                     )
+                _print_interpretation(result.interpretation)
                 print()
                 print(f"Document written. See it with `constat document "
                       f"{entry.reference} --show`.")
@@ -459,6 +491,10 @@ def _run_ticket(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
                       "document itself,")
                 print(f"or `constat document {entry.reference}` to gather again.")
                 return EXIT_OK
+    except ProviderError as exc:
+        # `ticket add` gathers, so it can hit a provider misconfiguration too.
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_PROVIDER
     except WorkspaceError as exc:
         print(f"{PROG}: error: {exc}", file=sys.stderr)
         return EXIT_WORKSPACE

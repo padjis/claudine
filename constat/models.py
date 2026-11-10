@@ -134,11 +134,13 @@ class Anchor(Frozen):
 
 
 class Rule(Frozen):
-    """A business rule, declared by a person (D-038).
+    """A business rule held in the catalogue (D-038, authorship per D-039).
 
-    `statement` is the rule in business language. It carries `requirement_ref`
-    provenance rather than `ai_interpretation`: a human wrote it, so it is
-    supplied requirement rather than machine inference.
+    `statement` is the rule in business language. Rules are generated and
+    maintained by an AI pass rather than declared by people, so a stored rule
+    carries `ai_interpretation` provenance — see `RuleProposal`. The `rule`
+    CLI commands remain as a bootstrap and test path, which is how the
+    catalogue is exercised with no provider configured.
     """
 
     name: str = Field(min_length=1)
@@ -146,6 +148,28 @@ class Rule(Frozen):
     created_at: datetime
     behaviours: tuple[Behaviour, ...] = ()
     anchors: tuple[Anchor, ...] = ()
+
+
+class RuleProposal(Frozen):
+    """A rule an interpretation pass proposes. Not a rule yet.
+
+    Deliberately a different type from `Rule`. A proposal has no `created_at`
+    because it is not in the catalogue, and it carries no authority until a
+    human accepts it (D-036, D-039). Collapsing the two would make it possible
+    to store a proposal by mistake, which is precisely the "no automatic
+    approvals" prohibition.
+
+    `provenance` is pinned rather than defaulted: machine inference cannot be
+    relabelled as anything else, least of all `requirement_ref`.
+    """
+
+    name: str = Field(min_length=1)
+    statement: str = Field(min_length=1)
+    behaviours: tuple[Behaviour, ...] = ()
+    anchors: tuple[Anchor, ...] = ()
+    provenance: Literal[ProvenanceType.AI_INTERPRETATION] = (
+        ProvenanceType.AI_INTERPRETATION
+    )
 
 
 class Ticket(Frozen):

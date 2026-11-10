@@ -8,6 +8,126 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-042 · 2026-11-10 · Packages are discovered, never listed
+
+**Decision.** `pyproject.toml` configures `[tool.setuptools.packages.find]` with
+`include = ["constat*"]` and `namespaces = false`. An explicit `packages = [...]` list is not used.
+A test asserts the configuration is a `find` directive, that every package directory on disk
+matches an include pattern, and that a wheel built from a staged copy of the source contains every
+module and imports on its own.
+
+**Context.** The explicit list said `packages = ["constat"]`, which setuptools took literally: from
+CON-04 onwards every subpackage — `git`, `store`, `evidence`, `ai` — was dropped from the wheel. No
+test noticed for five tickets, because the development install is editable and imports from the
+working tree. A built wheel would have failed at the first `from .store import …`. Found while
+verifying an unrelated claim about dependencies (CON-46).
+
+The deeper point is the failure *shape*: forgetting to extend a list produces a silently broken
+artefact rather than an error. Discovery cannot forget.
+
+**Consequences.**
+
+- A new subpackage is shipped without anyone remembering anything.
+- `namespaces = false` stays, or any directory — including `__pycache__` — becomes a package.
+- **Two testing traps are recorded here because both produced a false pass**, and both would
+  silently return if the test were rewritten:
+  - setuptools stages into `build/` and never cleans it, so an in-tree build includes modules left
+    by earlier builds. With the defect restored, building in place still produced a complete wheel.
+    The test builds from a staged copy.
+  - The editable install registers a meta path finder through a `.pth` file that claims `constat.*`
+    from the working tree, ahead of `sys.path`. The import probe loaded `cli` from the wheel and
+    `store` from the repository, passing against a wheel containing no `store`. The probe runs with
+    `-S` so `.pth` files are skipped.
+- CON-20 ("package the MVP") rests on this. It was not going to be discoverable at that point
+  without it, since nothing before CON-20 builds an artefact.
+
+**Status.** accepted
+
+---
+
+## D-041 · 2026-11-10 · A provider misconfiguration is refused, never reported as a finding
+
+**Decision.** If `CONSTAT_AI_PROVIDER` names a provider that is not implemented, or an implemented
+provider's credential is absent from the environment, Constat **fails** — exit code **5**, distinct
+from 2 (input), 3 (repository) and 4 (workspace). It never falls back to the null provider.
+
+Credentials are read from the environment only. The workspace may record *which* provider and model
+produced a proposal, because a reviewer needs that provenance; it never records the key.
+
+**Context.** The tempting behaviour is to degrade gracefully: if anything about the provider is
+wrong, use the null provider, and nothing ever breaks. What that actually produces is a document
+reading "no rules were identified" for a user who believed they had configured a provider — a
+configuration fault wearing the costume of a finding. That is product rule 1's failure mode exactly,
+and it is worse here than a crash, because the output looks like an answer.
+
+**Consequences.**
+
+- The provider registry ships **empty** in CON-41. No provider is implemented until CON-42, and an
+  empty registry is the honest way to say so — unlike an entry that exists and fails when used. The
+  error names what is available, which is currently `none`.
+- A fifth exit code is a cost. It is paid because the alternative is telling a user to check their
+  repository or their workspace when both are fine.
+- **The provider is resolved before any repository is read.** Resolving it last would mean reading
+  every repository and collecting all the evidence before refusing. A test watches the collector
+  rather than the document, because the document is written at the end either way and would not
+  catch the regression.
+- `ticket add` gathers too, so it carries the same exit code. A provider fault there leaves the
+  ticket open with an empty document, which is recoverable by re-running `constat document` once the
+  environment is fixed — a living document (D-029), not a lost one.
+
+**Status.** accepted
+
+---
+
+## D-040 · 2026-11-10 · Identity does not cross the provider boundary
+
+**Settles the question deferred by D-023** and required by it to be settled *before* a provider is
+wired up, not after.
+
+**Decision.** Nothing that identifies a person is sent to an AI provider. No author name, no
+committer name, no email address, no authored or committed timestamp. The payload carries the
+ticket reference, repository aliases, default branches, per-repository status, commit SHAs, commit
+subjects and bodies, changed paths and diff text — and has **no field** in which identity could be
+placed.
+
+Two further rules follow, because stripping declared fields is the easy half:
+
+- **Identity trailers are removed from commit messages.** `Signed-off-by`, `Co-Authored-By`,
+  `Reviewed-by` and the rest are entirely a person, so the line goes. Any remaining address-shaped
+  string in the prose is masked.
+- **Addresses in diff text are masked, but no diff line is ever dropped.** A changed `AUTHORS`,
+  mailmap or contributor list puts addresses in the evidence itself. Masking the address is correct;
+  removing the line would misstate the change, and this boundary must not trade one dishonesty for
+  another.
+
+**Context.** Product rule 7 (least privilege) decides it once the question is put properly: rule
+generation needs to know *what* changed and never *who* changed it. Identity therefore has no
+purpose on the far side of the boundary, and sending it would be a personal-data disclosure with
+nothing bought for it. Pseudonymisation was considered and rejected as the worst of both — still
+personal data in the regulatory sense, for a grouping capability nothing asks for.
+
+**Consequences.**
+
+- **Redaction is not a flag.** An option to disable it would be disabled in the run that matters.
+  The payload types are constructible only by going through `redact`.
+- **Redaction runs on the default path**, with no provider configured, so the boundary is exercised
+  by the ordinary workflow rather than first tested against a live API.
+- **SHAs stay.** A sha identifies a commit, not a person, and without it a proposal could not be
+  checked against the evidence that produced it (product rule 2).
+- The guarantee is partly structural rather than behavioural, which is the stronger form: a future
+  field-copying change cannot reintroduce an author without first adding the attribute to the type.
+- **An honest limit on the real-data evidence.** Verified against 8 real commits in Subject B: zero
+  address-shaped strings survive into the payload. But that range needed **no masking at all** —
+  identity was absent structurally, and the trailer and diff-masking paths were exercised only by
+  fixtures. Those paths rest on anticipating the case, not on having observed it here.
+- **Commit messages and diffs still leave the machine.** That is the product, not an oversight, and
+  it is what a prospective user must be told before a provider is enabled. Secret-scanning the
+  payload is *not* solved by this decision and is not claimed to be.
+
+**Status.** accepted
+
+---
+
 ## D-039 · 2026-11-10 · Rules are generated and maintained by AI, stored in the catalogue
 
 **Supersedes D-038's authorship.** The catalogue stays; people do not write it.
@@ -686,6 +806,10 @@ pathological file should not be able to consume a whole range's budget.
   locally, but when the optional AI provider arrives (D-003), sending commit metadata to a third
   party means sending personal data. PRODUCT_SPEC.md rule 7 applies and the question must be
   settled before any provider is wired up, not after.
+
+  > **Settled by D-040** on 2026-11-10, with the provider interface and before any provider exists.
+  > Identity does not cross the boundary at all. This entry is unchanged; the obligation it
+  > recorded is discharged.
 
 **Status.** accepted
 
