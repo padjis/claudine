@@ -52,7 +52,7 @@ Ticket register. The single source of truth for *what work exists*; the single s
 
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
-| CON-08 | Classify changes conservatively | Classification never pretends to know business intent from a filename alone. | ⬜ unchanged, but now follows CON-31..34 |
+| CON-08 | ~~Classify changes conservatively~~ | — | 🔁 **superseded by CON-40..43.** Classification by code signal was dissolved: D-034 removed flags, D-038 removed migrations, D-035 established that rules are business statements no signal can produce. |
 | CON-09 | Generate the first report | A developer can understand the report without reading raw command output. | ⬜ |
 | CON-10 | Separate facts from interpretation | Every claim has a provenance type; unsupported claims are visibly uncertain. | ⬜ |
 | CON-11 | Strengthen quality with tests | The report remains safe and useful across realistic Git cases. | ⬜ |
@@ -100,6 +100,11 @@ forces them.
 | --- | --- | --- | --- |
 | CON-29 | Ticket-scoped documentation (`constat document <ref>`) | A proposal can be initialised from a reference found in commit messages, across one or more repositories. | 🔁 **promoted** — now the primary workflow, delivered by CON-33/34 |
 | CON-39 | Regeneration must not destroy human edits | Re-running an operation preserves what a reviewer wrote. | ⬜ **blocks CON-12** |
+| CON-40 | Rule catalogue storage | Rules, behaviours and anchors persist and report coverage. | ✅ |
+| CON-41 | AI provider interface | A provider can be configured; absent one, Constat reports evidence and states that no rules were identified. | ⬜ **next** |
+| CON-42 | Rule generation | An AI pass proposes rules, behaviours and anchors from a ticket's evidence, all as `ai_interpretation`. | ⬜ |
+| CON-43 | Rule maintenance | Evidence contradicting a baselined rule proposes an update to it rather than a duplicate. | ⬜ hardest part of D-039 |
+| CON-44 | Per-rule review decisions | A reviewer accepts rule changes individually or rejects the implementation as inconclusive, with comments. | ⬜ needs CON-39 first |
 | CON-30 | ~~Surface near-duplicate proposals~~ | — | ❌ **withdrawn.** The problem was an artefact of proposal-per-run; D-029's one-document-per-ticket model does not have it. |
 
 ## Workspace model (D-027, D-028, D-029)

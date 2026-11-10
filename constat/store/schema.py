@@ -11,7 +11,7 @@ silently; a trigger cannot be bypassed by forgetting to call the right helper.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 CREATE TABLE schema_meta (
@@ -84,6 +84,39 @@ CREATE TABLE operation (
     payload       TEXT
 );
 
+-- A business rule, declared by a person (D-038). Not inferred from code:
+-- under D-035 a rule is a business statement, and a migration or annotation
+-- is at most evidence that one exists.
+CREATE TABLE rule (
+    id          INTEGER PRIMARY KEY,
+    name        TEXT    NOT NULL UNIQUE,
+    statement   TEXT    NOT NULL,
+    created_at  TEXT    NOT NULL
+);
+
+-- A distinct way the application handles a business case under its rule.
+CREATE TABLE behaviour (
+    id          INTEGER PRIMARY KEY,
+    rule_id     INTEGER NOT NULL REFERENCES rule(id) ON DELETE CASCADE,
+    description TEXT    NOT NULL,
+    created_at  TEXT    NOT NULL,
+    UNIQUE (rule_id, description)
+);
+
+-- Where a rule is believed to be implemented. A ticket's evidence touching an
+-- anchor makes the rule impacted. `repository_id` is nullable so a rule can
+-- span repositories by path pattern alone.
+CREATE TABLE anchor (
+    id            INTEGER PRIMARY KEY,
+    rule_id       INTEGER NOT NULL REFERENCES rule(id) ON DELETE CASCADE,
+    repository_id INTEGER REFERENCES repository(id) ON DELETE CASCADE,
+    path_glob     TEXT    NOT NULL,
+    created_at    TEXT    NOT NULL,
+    UNIQUE (rule_id, repository_id, path_glob)
+);
+
+CREATE INDEX idx_behaviour_rule ON behaviour(rule_id);
+CREATE INDEX idx_anchor_rule ON anchor(rule_id);
 CREATE INDEX idx_document_version_document ON document_version(document_id);
 CREATE INDEX idx_operation_document ON operation(document_id);
 
@@ -116,4 +149,27 @@ END;
 MIGRATIONS: dict[int, tuple[str, ...]] = {
     # 1 -> 2: drop ticket.title (D-032).
     1: ("ALTER TABLE ticket DROP COLUMN title",),
+    # 2 -> 3: the rule catalogue (D-038).
+    2: (
+        "CREATE TABLE rule ("
+        " id INTEGER PRIMARY KEY,"
+        " name TEXT NOT NULL UNIQUE,"
+        " statement TEXT NOT NULL,"
+        " created_at TEXT NOT NULL)",
+        "CREATE TABLE behaviour ("
+        " id INTEGER PRIMARY KEY,"
+        " rule_id INTEGER NOT NULL REFERENCES rule(id) ON DELETE CASCADE,"
+        " description TEXT NOT NULL,"
+        " created_at TEXT NOT NULL,"
+        " UNIQUE (rule_id, description))",
+        "CREATE TABLE anchor ("
+        " id INTEGER PRIMARY KEY,"
+        " rule_id INTEGER NOT NULL REFERENCES rule(id) ON DELETE CASCADE,"
+        " repository_id INTEGER REFERENCES repository(id) ON DELETE CASCADE,"
+        " path_glob TEXT NOT NULL,"
+        " created_at TEXT NOT NULL,"
+        " UNIQUE (rule_id, repository_id, path_glob))",
+        "CREATE INDEX idx_behaviour_rule ON behaviour(rule_id)",
+        "CREATE INDEX idx_anchor_rule ON anchor(rule_id)",
+    ),
 }

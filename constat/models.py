@@ -115,6 +115,39 @@ class RegisteredRepository(Frozen):
     unstated truncation (D-027)."""
 
 
+class Behaviour(Frozen):
+    """A distinct way the application handles a business case (D-035)."""
+
+    description: str = Field(min_length=1)
+
+
+class Anchor(Frozen):
+    """Where a rule is believed to be implemented.
+
+    A path glob, optionally scoped to one repository. Evidence touching an
+    anchor makes the rule impacted — which is a statement about *code*, not
+    about meaning. What the behaviour now does is for the reviewer to say.
+    """
+
+    path_glob: str = Field(min_length=1)
+    repository_alias: str | None = None
+
+
+class Rule(Frozen):
+    """A business rule, declared by a person (D-038).
+
+    `statement` is the rule in business language. It carries `requirement_ref`
+    provenance rather than `ai_interpretation`: a human wrote it, so it is
+    supplied requirement rather than machine inference.
+    """
+
+    name: str = Field(min_length=1)
+    statement: str = Field(min_length=1)
+    created_at: datetime
+    behaviours: tuple[Behaviour, ...] = ()
+    anchors: tuple[Anchor, ...] = ()
+
+
 class Ticket(Frozen):
     """A unit of work, owning exactly one document (D-029).
 

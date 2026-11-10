@@ -8,6 +8,187 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-039 · 2026-11-10 · Rules are generated and maintained by AI, stored in the catalogue
+
+**Supersedes D-038's authorship.** The catalogue stays; people do not write it.
+
+**Decision.** Business rules, their behaviours and their anchors are **generated and maintained by
+an AI interpretation pass** over collected evidence. The catalogue is where they are stored and
+versioned. Humans do not author rules; they **accept or reject** them (D-036), and accepted rules
+migrate into the baseline (D-037).
+
+**Context.** D-038 chose a human-declared catalogue to avoid recurring API cost before validation.
+That is reversed deliberately: a catalogue only ever contains the rules someone remembered to
+declare, and the drift between a hand-maintained catalogue and the code is the disease this
+product exists to treat. Having Constat suffer from it would be self-defeating.
+
+**Consequences.**
+
+- **Provenance is corrected.** D-038 reasoned that a human-written statement is `requirement_ref`.
+  Generated rules are **`ai_interpretation`** — proposals, visibly uncertain, carrying no
+  authority until accepted. The governance model already enforces this; the taxonomy entry simply
+  changes.
+- **AI stops being optional for the core output.** D-003 keeps the provider interface and keeps
+  the *evidence* path provider-free, so Constat still runs without a key — but with no provider
+  there are no rules, only evidence, and it must say so rather than imply none exist.
+- **This is now the roadmap's top risk made concrete.** The plan says to postpone AI API calls
+  until the workflow is validated, and validation stands at zero discovery conversations
+  (CON-26). The cost is real: evidence is already 2000–4000 diff lines per range per repository.
+  Proceeding is a deliberate choice, not an oversight.
+- **"Maintained" means rules change as the code does.** A later ticket whose evidence contradicts
+  a baselined rule must propose an update to that rule, not silently create a second one. That is
+  harder than generation and is the part most likely to go wrong.
+- The catalogue's coverage reporting matters more, not less. An AI pass will miss rules too, so
+  changed files claimed by no rule must stay prominent.
+- Manual `rule` commands are kept as a bootstrap and test path, not as the model. They are how the
+  catalogue is exercised without a provider configured.
+
+**Status.** accepted
+
+---
+
+## D-038 · 2026-11-10 · Rules come from a catalogue, not from code signals
+
+**Supersedes the "deterministic spine" of D-010.** Feature flags went at D-034; SQL migrations go
+now; nothing replaces them.
+
+**Decision.** Business rules live in a **catalogue** held in the workspace. Each rule carries its
+behaviours and a set of **anchors** — the paths in registered repositories whose code is
+understood to implement it. Rules are never inferred from code *signals* such as migrations or
+annotations.
+
+> **Authorship superseded by D-039.** This entry originally had people declaring the rules. They
+> are generated and maintained by AI; the catalogue structure below is unchanged.
+
+**Context.** D-035 settled that a rule is a business statement and a behaviour is a way the
+application handles a business case. Neither can be read out of a migration or an annotation, so
+the spine was never going to produce rules — only evidence. Migrations are irrelevant for the same
+reason flags were: a schema change is a technical artefact that may accompany a rule change, or
+may not, and treating it as one would report on the machinery again.
+
+The alternative was an AI pass, deferred here on cost grounds and **chosen the same day in
+D-039**. The cost concern stands and is recorded there rather than dismissed.
+
+**Consequences.**
+
+- **It works in any language.** Subject B is TypeScript with no migrations and no bean validation;
+  under the catalogue it is served exactly as well as Subject A, which no code-derived signal
+  could have managed.
+- ~~Rule statements become authoritative rather than proposed.~~ **Corrected by D-039:** generated
+  rules are `ai_interpretation` — proposals carrying no authority until accepted.
+- **Status is computed at the level of evidence, never meaning.** Constat can say "the code
+  anchored to this behaviour changed in this ticket"; it cannot say what the behaviour now *is*.
+  The reviewer supplies that. This is D-012's drift reasoning applied to rules: a signal, never a
+  verdict.
+- **Changes covered by no rule must be reported prominently.** This is the catalogue's failure
+  mode: it only knows the rules someone declared, so a ticket touching ten files where only two
+  are anchored must say so loudly. A document listing two impacted rules while silently ignoring
+  eight unanchored files would be exactly the confident under-report this product exists to
+  prevent.
+- The catalogue drifts from the code — the disease Constat treats. This is the specific weakness
+  that D-039 reverses authorship to address: a hand-maintained catalogue would have drifted by
+  construction.
+- `NEW` and `REMOVED` behaviours come from review, not detection: the reviewer adds a behaviour
+  the implementation introduced, or marks one whose anchor has gone.
+
+**Status.** accepted
+
+---
+
+## D-037 · 2026-11-10 · Accepted rules migrate into the baseline
+
+**Decision.** When a reviewer accepts a rule change, that rule is **migrated into the main
+baseline** — the approved description of how mainline behaves. A later gather compares the
+ticket's rules against the baseline, not against a fresh reading of mainline.
+
+**Context.** Answers the question CON-39 raised: what happens to accepted rules when a document is
+re-gathered. Nothing is re-litigated, because an accepted rule is no longer part of the proposal —
+it has become approved product knowledge.
+
+**Consequences.**
+
+- This unifies three things that were separate tickets. The baseline (CON-14) *is* the accepted
+  rule set; comparing against the last approved baseline (CON-15) *is* how NEW / CHANGED /
+  UNCHANGED / REMOVED are computed; and drift (D-012) is a baseline rule whose supporting evidence
+  has since moved.
+- **`NEW` and `CHANGED` are relative to the baseline, not to mainline.** A rule absent from the
+  baseline is new even if it has existed in code for years but was never documented. That is the
+  correct meaning for a governance record: it tracks what has been *approved*, not what exists.
+- Baseline versions stay immutable and append-only (D-029, enforced by trigger). Migrating a rule
+  creates a new baseline version; it never edits the previous one.
+- A rule accepted on one ticket and then changed by another will show as `CHANGED` against the
+  baseline, which is exactly right.
+
+**Status.** accepted
+
+---
+
+## D-036 · 2026-11-10 · Rejection means inconclusive, not wrong
+
+**Decision.** Rejecting a document marks the attempt **inconclusive**: the implementation is
+missing something and another pull request is expected. It is not a statement that Constat
+described the change badly, and it is not a permanent verdict on the work.
+
+A rejection carries **commentary** explaining what is missing. Comments are first-class, not a
+single free-text rationale field.
+
+**Context.** The schema's `decision` column allows `approved` and `rejected`, but "rejected" was
+ambiguous between two very different signals: *the write-up is wrong* and *the change should not
+ship*. The intended meaning is neither — it is "not done yet, iterate".
+
+**Consequences.**
+
+- The stored decision must say which it is, or a later reader cannot tell why work stopped. The
+  vocabulary needs to carry "inconclusive — another PR expected" distinctly.
+- Comments need their own storage, not a single `rationale` column: there may be several, attached
+  to specific rules rather than only to the document as a whole.
+- **Multi-person commenting is out of MVP scope.** Reviewer identity is asserted rather than
+  authenticated (D-007), so "people commented" is a claim Constat cannot verify. One reviewer's
+  comments are recorded as asserted; a real multi-user flow needs identity first.
+- A rejected document is not closed. The ticket stays open, the next gather picks up the follow-up
+  commits, and the rejection and its comments remain in history.
+
+**Status.** accepted
+
+---
+
+## D-035 · 2026-11-10 · A rule is business-oriented; a behaviour is a way the app handles it
+
+**Decision.**
+
+- A **rule** is purely business-oriented and determines how the application behaves. Not a
+  migration, not an annotation — those are *evidence for* a rule, never the rule itself.
+- A **behaviour** is any distinct way the application handles a business case under that rule.
+
+So "a transfer over the daily limit is refused" is a behaviour of the rule "daily transfer limit".
+`@Size(max=250)` is evidence that such a rule exists, but is not itself either.
+
+**Context.** This is the definition that makes the product its stated promise rather than a diff
+viewer, and it settles what D-010's spine was for: migrations and validation constraints are
+**evidence**, not rules.
+
+**Consequences — one of them forces a decision deferred since D-003.**
+
+- **Rules cannot be derived deterministically.** No amount of reading migrations or annotations
+  produces "a transfer over the daily limit is refused". That sentence requires either
+  interpretation or a human. The deterministic spine supports rules; it cannot generate them.
+- Behaviours are branches of business logic, which are semantic rather than syntactic. Same
+  conclusion.
+- Combined with the requirement that the MVP work across more than one repository — Subject B is
+  TypeScript, with no migrations and no bean validation — a deterministic-only extractor is ruled
+  out on both counts.
+- This is the roadmap's own "interpretation layer" arriving: *AI proposes impact and plain-language
+  explanations, always tied to evidence and uncertainty*. It is consistent with the plan, provided
+  output stays a proposal, carries `ai_interpretation` provenance, and is human-approved — all of
+  which the governance model already enforces.
+- What it does change is **D-003's "optional"**. Without a provider there can be no rules, only
+  evidence. The honest shape is that Constat still runs and still reports evidence, but states
+  plainly that no rules were identified — rather than implying none exist.
+
+**Status.** accepted
+
+---
+
 ## D-034 · 2026-11-10 · Feature flags are not a business rule source
 
 **Amends D-010**, which listed feature flags as one of three deterministic rule-bearing signals.
@@ -920,19 +1101,16 @@ rule-bearing evidence and must return `unknown` elsewhere.
 
 In the chosen sample repository (D-009) that spine exists and is strong:
 
-| Signal | Where it lives in Subject A | Why it is rule-bearing |
-| --- | --- | --- |
-| Liquibase migrations | numbered changelog directories in the backend module (74 tracked, ordered, named) | A schema/data migration is almost always a rule or constraint change, and the directory name states the intent. |
-| Bean validation | `javax.validation` / hibernate-validator annotations in the model module | Declarative constraints: `@NotNull`, `@Size`, `@Pattern` are rules in machine-readable form. |
-
-> **Amended by D-034.** This table originally listed feature flags as a third signal. They are
-> not a rule source: a flag is a control *over* behaviour rather than a statement of it, and its
-> live value is not in the repository at all.
+> **This table is withdrawn.** It listed three code signals — feature flags, SQL migrations and
+> bean validation — as deterministic sources of business rules. Flags were removed by D-034,
+> migrations and the remainder by **D-038**. None of them are rules: under D-035 a rule is a
+> business statement, and a migration or an annotation is at most *evidence* that one exists.
+> Rules now come from a human-declared catalogue.
 
 Classification (Session 08) targets these three first. Everything else is `unknown` until a human
 says otherwise. This is a narrower and more defensible MVP than "explain the diff".
 
-**Status.** accepted; the rule-source table amended by D-034
+**Status.** accepted; the rule-source table withdrawn by D-038
 
 ---
 

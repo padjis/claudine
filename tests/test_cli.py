@@ -553,3 +553,67 @@ class TestDocumentCommand:
 
         assert main(["--workspace", ws, "document", "nope"]) == 4
         assert "no ticket" in capsys.readouterr().err
+
+
+class TestRuleCommands:
+    def _ws(self, tmp_path):
+        target = str(tmp_path / "ws")
+        main(["--workspace", target, "init"])
+        return target
+
+    def test_declare_show_and_list(self, tmp_path, capsys):
+        ws = self._ws(tmp_path)
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "rule", "add", "limit", "At most the limit."]) == 0
+        assert main(["--workspace", ws, "rule", "behaviour", "limit", "Refused above."]) == 0
+        assert main(["--workspace", ws, "rule", "anchor", "limit", "rules.py"]) == 0
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "rule", "show", "limit"]) == 0
+        shown = capsys.readouterr().out
+        assert "At most the limit." in shown
+        assert "Refused above." in shown
+        assert "rules.py" in shown
+
+    def test_a_new_rule_is_told_it_cannot_match_anything(self, tmp_path, capsys):
+        """An unanchored rule is inert; saying so prevents silent uselessness."""
+        ws = self._ws(tmp_path)
+        capsys.readouterr()
+
+        main(["--workspace", ws, "rule", "add", "limit", "At most the limit."])
+        out = capsys.readouterr().out
+        assert "can never be matched" in out
+
+    def test_an_empty_catalogue_explains_the_consequence(self, tmp_path, capsys):
+        """No rules must not read as "nothing is affected"."""
+        ws = self._ws(tmp_path)
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "rule", "list"]) == 0
+        out = capsys.readouterr().out
+        assert "No rules declared" in out
+        assert "not the same as nothing changing" in out
+
+    def test_duplicate_declaration_exits_four(self, tmp_path, capsys):
+        ws = self._ws(tmp_path)
+        main(["--workspace", ws, "rule", "add", "limit", "At most."])
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "rule", "add", "limit", "At most."]) == 4
+        assert "already exists" in capsys.readouterr().err
+
+    def test_remove_withdraws_the_rule(self, tmp_path, capsys):
+        ws = self._ws(tmp_path)
+        main(["--workspace", ws, "rule", "add", "limit", "At most."])
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "rule", "remove", "limit"]) == 0
+        assert "withdrawn" in capsys.readouterr().out
+
+    def test_show_an_unknown_rule_exits_four(self, tmp_path, capsys):
+        ws = self._ws(tmp_path)
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "rule", "show", "nope"]) == 4
+        assert "no rule" in capsys.readouterr().err

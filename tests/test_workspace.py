@@ -362,33 +362,56 @@ class TestMigration:
     matters most.
     """
 
+    # A frozen copy of schema version 1, not derived from the current one.
+    # Deriving it would make this test rebuild itself on every schema change,
+    # so it would stop testing the migration it claims to test.
+    V1 = """
+    CREATE TABLE schema_meta (
+        id INTEGER PRIMARY KEY CHECK (id = 1), schema_version INTEGER NOT NULL,
+        constat_version TEXT NOT NULL, created_at TEXT NOT NULL);
+    CREATE TABLE repository (
+        id INTEGER PRIMARY KEY, alias TEXT NOT NULL UNIQUE, source TEXT NOT NULL,
+        source_kind TEXT NOT NULL CHECK (source_kind IN ('local', 'remote')),
+        cache_path TEXT, identity TEXT, default_branch TEXT,
+        added_at TEXT NOT NULL, last_fetched_at TEXT);
+    CREATE TABLE ticket (
+        id INTEGER PRIMARY KEY, reference TEXT NOT NULL UNIQUE, title TEXT,
+        created_at TEXT NOT NULL);
+    CREATE TABLE document (
+        id INTEGER PRIMARY KEY,
+        ticket_id INTEGER NOT NULL UNIQUE REFERENCES ticket(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        body TEXT NOT NULL DEFAULT '');
+    CREATE TABLE document_version (
+        id INTEGER PRIMARY KEY,
+        document_id INTEGER NOT NULL REFERENCES document(id),
+        version_no INTEGER NOT NULL, content TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        previous_version_id INTEGER REFERENCES document_version(id),
+        decision TEXT NOT NULL CHECK (decision IN ('approved', 'rejected')),
+        decided_by TEXT NOT NULL, decided_at TEXT NOT NULL, rationale TEXT,
+        UNIQUE (document_id, version_no));
+    CREATE TABLE operation (
+        id INTEGER PRIMARY KEY,
+        document_id INTEGER NOT NULL REFERENCES document(id) ON DELETE CASCADE,
+        repository_id INTEGER REFERENCES repository(id),
+        kind TEXT NOT NULL, ran_at TEXT NOT NULL,
+        summary TEXT NOT NULL DEFAULT '', payload TEXT);
+    """
+
     def _make_v1(self, home: Path) -> None:
         """Build a workspace at schema version 1, title column and all."""
-        from constat.store.schema import SCHEMA
-
         home.mkdir(parents=True, exist_ok=True)
-        v1 = SCHEMA.replace(
-            "CREATE TABLE ticket (\n"
-            "    id          INTEGER PRIMARY KEY,\n"
-            "    reference   TEXT    NOT NULL UNIQUE,\n"
-            "    created_at  TEXT    NOT NULL\n"
-            ");",
-            "CREATE TABLE ticket (\n"
-            "    id          INTEGER PRIMARY KEY,\n"
-            "    reference   TEXT    NOT NULL UNIQUE,\n"
-            "    title       TEXT,\n"
-            "    created_at  TEXT    NOT NULL\n"
-            ");",
-        )
         connection = sqlite3.connect(home / "workspace.db")
-        connection.executescript(v1)
+        connection.executescript(self.V1)
         connection.execute(
             "INSERT INTO schema_meta (id, schema_version, constat_version, created_at) "
             "VALUES (1, 1, '0.0.1', ?)",
             (utc_now(),),
         )
         connection.execute(
-            "INSERT INTO ticket (reference, title, created_at) VALUES ('622', 'A title', ?)",
+            "INSERT INTO ticket (reference, title, created_at) "
+            "VALUES ('622', 'A title', ?)",
             (utc_now(),),
         )
         connection.commit()
@@ -414,6 +437,24 @@ class TestMigration:
             }
         assert "title" not in columns
         assert {"id", "reference", "created_at"} <= columns
+
+    def test_migration_adds_the_catalogue_tables(self, home: Path):
+        """v2 -> v3 brings the rule catalogue (D-038)."""
+        self._make_v1(home)
+        with Workspace.open(home) as ws:
+            tables = {
+                r["name"]
+                for r in ws.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            }
+        assert {"rule", "behaviour", "anchor"} <= tables
+
+    def test_migration_runs_every_step_in_order(self, home: Path):
+        """A v1 workspace must cross both steps, not just the first."""
+        self._make_v1(home)
+        with Workspace.open(home) as ws:
+            assert ws.schema_version == 3
+            columns = {r["name"] for r in ws.execute("PRAGMA table_info(ticket)")}
+        assert "title" not in columns
 
     def test_migration_is_persisted_not_repeated(self, home: Path):
         self._make_v1(home)
