@@ -21,12 +21,19 @@ from .redaction import (
     FileChange,
     ProviderPayload,
     RepositoryContext,
+    as_dict,
     redact,
     scrub_diff,
     scrub_message,
 )
 from .parsing import ParseResult, Rejection, parse
-from .scanning import COMMIT_MESSAGE, SecretFinding, refusal_message, scan
+from .scanning import (
+    COMMIT_MESSAGE,
+    SecretFinding,
+    guard_release,
+    refusal_message,
+    scan,
+)
 from .scanning import describe as describe_scan
 from .settings import PROVIDER_ENV, resolve
 
@@ -45,7 +52,9 @@ __all__ = [
     "Rejection",
     "RepositoryContext",
     "SecretFinding",
+    "as_dict",
     "describe_scan",
+    "guard_release",
     "parse",
     "redact",
     "refusal_message",

@@ -8,6 +8,42 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-047 · 2026-11-11 · Every path where the payload leaves goes through one gate
+
+**Decision.** `guard_release(payload, accepted=…)` is the single chokepoint for any path where the
+payload leaves the process. It scans and raises `PayloadRefused` unless a human accepted the
+findings for that run. `constat document <ref> --payload` is the first caller besides `gather`.
+
+**An export refuses unconditionally**, where `gather` with no provider scans, reports and
+continues. That asymmetry is the decision: a local run that transmits nothing can tolerate a false
+positive, and an export cannot, because by the time it has printed it has left.
+
+**Context.** D-044 gated the provider path, keyed on `provider.name != NULL_PROVIDER_NAME`. D-045
+then created a second front door — the host supplies the model, so the payload has to be handed
+out — and that door bypassed both D-040 and D-044 entirely. A gate covering one of two doors is
+decoration.
+
+**Consequences.**
+
+- **It raises rather than returning a flag.** A caller that forgets to check a boolean still sends
+  the payload; a caller that forgets to catch an exception does not.
+- **Export writes nothing** except an override record. A reader that mutated the governance record
+  would make the document depend on who looked at it.
+- **An export override is recorded under its own kind** (`scan_override_export`), distinct from a
+  send override. Two different disclosures; collapsing them loses which one a reviewer is seeing.
+- **`collect()` is shared** by both paths, so a reviewer and a model cannot be looking at different
+  evidence for the same ticket. A test asserts the two payloads are identical.
+- **Any future egress path inherits this obligation** — a submit command that echoes the payload,
+  an MCP resource, a debug dump. The gate exists so the answer is "call `guard_release`" rather
+  than "remember D-040 and D-044".
+- Verified on real data: Subject B exports cleanly with no identity field present; Subject A is
+  **refused with zero bytes on stdout**, having real credentials in the window. Without this the
+  export would have handed them to a third-party model.
+
+**Status.** accepted
+
+---
+
 ## D-046 · 2026-11-11 · A provider reply is parsed, grounded and refused — never silently emptied
 
 **Decision.** `constat/ai/parsing.py` converts a provider reply into `RuleProposal`s under three

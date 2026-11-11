@@ -29,7 +29,7 @@ with the author field it happened to have to hand.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle avoidance only
@@ -130,6 +130,16 @@ class ProviderPayload:
     @property
     def is_empty(self) -> bool:
         return self.commit_count == 0
+
+
+def as_dict(payload: ProviderPayload) -> dict:
+    """The payload as plain data, for handing to something outside this process.
+
+    A deliberate function rather than `dataclasses.asdict` at the call site:
+    the serialised shape is a contract once anything reads it, and it belongs
+    next to the types it serialises so the two cannot drift.
+    """
+    return asdict(payload)
 
 
 def redact(reference: str, findings: tuple[RepositoryFindings, ...]) -> ProviderPayload:

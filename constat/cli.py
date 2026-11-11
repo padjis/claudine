@@ -8,6 +8,7 @@ only maps them onto argv and exit codes.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 
 from . import __version__
@@ -16,7 +17,8 @@ from .errors import InvalidInput, ProviderError, RepositoryError, WorkspaceError
 from .evidence import collect_evidence, describe_commit
 from .mapping import change_proposal, commit_record, state_proposal
 from .store import Catalogue, Registry, TicketStore, Workspace, database_path
-from .operations import gather
+from .ai import as_dict as payload_as_dict
+from .operations import export_payload, gather
 from .tickets import TicketStatus, find_ticket_commits
 from .git import (
     compare_revisions,
@@ -137,6 +139,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     document.add_argument(
         "--show", action="store_true", help="print the document body"
+    )
+    document.add_argument(
+        "--payload",
+        action="store_true",
+        help=(
+            "print the redacted evidence payload as JSON, for a model outside "
+            "Constat to read. Identity never crosses this boundary (D-040), "
+            "and the credential scan refuses unconditionally here — unlike a "
+            "local run, an export has left by the time it has printed."
+        ),
     )
 
     ticket = subparsers.add_parser(
@@ -371,6 +383,42 @@ def _run_rule(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     return EXIT_USAGE  # pragma: no cover
 
 
+def _run_export(args: argparse.Namespace) -> int:
+    """Print the redacted payload for something outside Constat to read.
+
+    Everything about this path assumes the output leaves: the credential gate
+    is unconditional, and the warning goes to stderr so stdout stays a clean
+    JSON document a pipe can consume.
+    """
+    try:
+        with Workspace.open(args.workspace) as workspace:
+            result = export_payload(
+                workspace,
+                args.reference,
+                accept_scan_findings=args.accept_scan_findings,
+            )
+    except WorkspaceError as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_WORKSPACE
+    except ProviderError as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_PROVIDER
+    except RepositoryError as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_REPOSITORY
+
+    print(json.dumps(payload_as_dict(result.payload), indent=2, default=str))
+
+    if result.accepted:
+        print(
+            f"{PROG}: warning: {len(result.scan_findings)} credential-scan "
+            "finding(s) were accepted and are present in this payload; "
+            "recorded in the document as a human decision",
+            file=sys.stderr,
+        )
+    return EXIT_OK
+
+
 def _print_scan(result) -> None:
     """Report the credential scan.
 
@@ -425,6 +473,17 @@ def _print_interpretation(interpretation) -> None:
 
 
 def _run_document(args: argparse.Namespace) -> int:
+    if args.payload and args.show:
+        print(
+            f"{PROG}: error: --payload and --show print different things; "
+            "pick one",
+            file=sys.stderr,
+        )
+        return EXIT_USAGE
+
+    if args.payload:
+        return _run_export(args)
+
     try:
         with Workspace.open(args.workspace) as workspace:
             result = gather(

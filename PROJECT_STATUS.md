@@ -324,24 +324,89 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-**CON-49 — submit a reply from outside.** A reply produced anywhere becomes grounded proposals via
-the CLI. This is the prerequisite D-045 created: the agent surface is an MCP server rather than a
-provider Constat calls, so the next step is a submit path, not an HTTP client.
+**CON-51 — proposal storage.** A schema change, and the decision needs taking before any code.
 
-Two things must be true of it, and the second is a real hole:
+**Nothing in the workspace persists a proposal.** An `Interpretation` lives for one `gather()`
+call and leaves two traces: rendered text in the document body, and an `operation` row. The body
+is regenerated on every run (D-043), so:
 
-1. **It runs D-046's parser unchanged.** `parse(text, payload)` does not care where the text came
-   from, which is the whole reason the direction change was cheap.
-2. **It passes the same gates as the provider path.** Redaction (D-040) and credential refusal
-   (D-044) currently fire only when `provider.name != NULL_PROVIDER_NAME`. A submit or export
-   command is a new front door; if the gate does not apply there, D-040 and D-044 are decorative.
+```
+submit a reply   →  proposals rendered into the body
+constat document →  body regenerated, proposals gone
+```
 
-Then **CON-50** (the MCP server) — which needs agreeing first, since `CLAUDE.md` requires
-agreement for new infrastructure.
+That is not a bug in regeneration. It is CON-39's hazard surfacing somewhere new: D-037 makes
+acceptance per-rule and human (CON-44), so a proposal is **durable pre-acceptance state** — it has
+to survive between the run that produced it and the reviewer who later accepts or rejects it. It
+needs a table, not a paragraph.
+
+Three questions the schema has to answer, and each is a product decision:
+
+1. **Does a second submission replace the previous proposals, or accumulate alongside them?**
+   Accumulating recreates the near-duplicate problem CON-30 was withdrawn for. Replacing destroys
+   a proposal a reviewer may be part-way through judging.
+2. **Is the provider and model recorded, and as what?** Under D-045 the model's identity is
+   self-reported by the client — nearer `assumption` than `observed_fact`, and it must not be
+   stored as the latter.
+3. **Does a proposal carry a durable identity?** CON-39 needs one so a comment can attach to
+   something that survives regeneration. CON-51 and CON-39 may be the same storage question
+   arriving from two directions.
+
+Then **CON-52** (submit) and **CON-50** (the MCP server) — the latter needs agreeing first, since
+`CLAUDE.md` requires agreement for new infrastructure.
 
 Still standing: validation is at **zero discovery conversations** (CON-26). D-045 removes the
-per-call cost objection to CON-42 (the host pays for inference), but it does not answer whether
-anyone wants the output.
+per-call cost objection, but it does not answer whether anyone wants the output.
+
+---
+
+## CON-49 — done when: *the payload can be handed out, and only through the gate* ✅
+
+| Item | Status |
+| --- | --- |
+| `guard_release` — one chokepoint for every egress path | ✅ D-047 |
+| `constat document <ref> --payload` — redacted payload as JSON on stdout | ✅ |
+| Export refuses **unconditionally**; `gather` with no provider still only reports | ✅ the asymmetry |
+| `collect()` shared, so both paths see identical evidence | ✅ asserted equal |
+| Export writes nothing but an override record | ✅ |
+| Override recorded under its own kind, distinct from a send override | ✅ `scan_override_export` |
+| `--payload` with `--show` is a usage error | ✅ exit 2 |
+
+### Tests run
+
+```
+.venv/bin/python -m pytest  →  542 passed in 33.63s
+```
+
+22 new tests. The existing 520 needed no changes.
+
+### The hole this closed, on real data
+
+| Subject | Result |
+| --- | --- |
+| B, 8 commits, 33 files | Exports cleanly — ~195 KB, and no identity field on the commit type at all |
+| A, 30 commits | **Refused, exit 5, zero bytes on stdout** — it has real credentials in the window |
+
+Before this, `--payload` would have handed Subject A's credentials to a third-party model. The
+gate was keyed on a provider being configured, and an export has no provider.
+
+**Mutation-checked:** reverting the export to the provider-only gate fails 3 tests, including the
+one asserting stdout stayed empty.
+
+### Why it raises instead of returning a flag
+
+A caller that forgets to check a boolean still sends the payload. A caller that forgets to catch
+an exception does not. Any future egress path — a submit echo, an MCP resource, a debug dump —
+inherits the obligation, and the answer is "call `guard_release`" rather than "remember D-040 and
+D-044".
+
+### A test that asserted nothing, again
+
+The CLI test for "the export does not fill the document" originally checked the body was empty.
+`ticket add` already fills it (CON-34), so the assertion was vacuous. Rewritten to compare the
+body before and after — the property is that the export does not *change* it. Second time this
+session an assertion has been hollow rather than wrong; both times the fixture had more state than
+I assumed.
 
 ---
 

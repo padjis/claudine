@@ -23,10 +23,11 @@ from .ai import (
     NULL_PROVIDER_NAME,
     Interpretation,
     Provider,
+    ProviderPayload,
     SecretFinding,
     describe_scan,
+    guard_release,
     redact,
-    refusal_message,
     scan,
 )
 from .ai import resolve as resolve_provider
@@ -346,6 +347,97 @@ def render(
     return "\n".join(lines)
 
 
+def collect(
+    workspace: Workspace,
+    reference: str,
+    limits: ExcerptLimits = DEFAULT_LIMITS,
+) -> tuple[RepositoryFindings, ...]:
+    """Read every registered repository for a ticket. Writes nothing.
+
+    Shared by `gather` and `export_payload` so the two cannot disagree about
+    what a ticket's evidence is.
+    """
+    TicketStore(workspace).document(reference)  # NotRegistered if unknown
+    registry = Registry(workspace)
+    return tuple(
+        _collect_repository(entry, reference, limits) for entry in registry.list()
+    )
+
+
+@dataclass(frozen=True)
+class ExportResult:
+    """A payload cleared to leave the process, and what the scan found."""
+
+    payload: ProviderPayload
+    scan_findings: tuple[SecretFinding, ...] = ()
+    accepted: bool = False
+
+
+def export_payload(
+    workspace: Workspace,
+    reference: str,
+    limits: ExcerptLimits = DEFAULT_LIMITS,
+    accept_scan_findings: bool = False,
+) -> ExportResult:
+    """Produce the payload for something outside this process to read.
+
+    **This is the second front door** (D-045). Whatever reads the result — an
+    agent, an MCP client, a person with a clipboard — is outside Constat, so
+    the payload is leaving: redaction applies, and the credential gate applies
+    *unconditionally*, not only when a provider is configured.
+
+    That is the one asymmetry with `gather`. A local run that sends nothing can
+    tolerate a false positive; an export cannot, because by the time it has
+    printed, it has left.
+
+    Writes nothing except an override record when findings were accepted — an
+    override nobody can see afterwards is the same as no scan (D-044).
+    """
+    findings = collect(workspace, reference, limits)
+    payload = redact(reference, findings)
+    scan_findings = guard_release(payload, accepted=accept_scan_findings)
+
+    accepted = bool(scan_findings)
+    if accepted:
+        _record_scan_override(workspace, reference, scan_findings, kind="scan_override_export")
+
+    return ExportResult(
+        payload=payload, scan_findings=scan_findings, accepted=accepted
+    )
+
+
+def _record_scan_override(
+    workspace: Workspace,
+    reference: str,
+    scan_findings: tuple[SecretFinding, ...],
+    kind: str,
+) -> None:
+    """Record that a human let credential findings through.
+
+    Against the document rather than a repository: the decision was about the
+    payload as a whole. Locations are kept so the override stays auditable; the
+    matched text never is.
+    """
+    document_id = workspace.execute(
+        "SELECT d.id FROM document d JOIN ticket t ON t.id = d.ticket_id "
+        "WHERE t.reference = ?",
+        (reference,),
+    ).fetchone()["id"]
+
+    with workspace.transaction() as ws:
+        ws.execute(
+            "INSERT INTO operation "
+            "(document_id, repository_id, kind, ran_at, summary, payload) "
+            f"VALUES (?, NULL, '{kind}', ?, ?, ?)",
+            (
+                document_id,
+                utc_now(),
+                f"accepted {len(scan_findings)} credential-scan finding(s)",
+                "\n".join(f.describe() for f in scan_findings),
+            ),
+        )
+
+
 def gather(
     workspace: Workspace,
     reference: str,
@@ -373,26 +465,23 @@ def gather(
     if provider is None:
         provider = resolve_provider()
 
-    tickets = TicketStore(workspace)
-    tickets.document(reference)  # raises NotRegistered if the ticket is unknown
-
-    registry = Registry(workspace)
-    findings = tuple(
-        _collect_repository(entry, reference, limits) for entry in registry.list()
-    )
+    findings = collect(workspace, reference, limits)
 
     # Redaction happens on the real path rather than only where a provider
     # exists. A privacy boundary first exercised by the code that needs it is
     # a boundary first tested in production.
     payload = redact(reference, findings)
 
-    scan_findings = scan(payload)
     sends_payload = provider.name != NULL_PROVIDER_NAME
-    if scan_findings and sends_payload and not accept_scan_findings:
+    if sends_payload:
         # Refused before `interpret`, and before the document is written. A
         # partially updated document would be worse than none: it would record
         # evidence as if the run had succeeded.
-        raise PayloadRefused(refusal_message(scan_findings))
+        scan_findings = guard_release(payload, accepted=accept_scan_findings)
+    else:
+        # Nothing is transmitted, so nothing is refused — but the scan still
+        # runs and is still reported (D-044).
+        scan_findings = scan(payload)
 
     accepted = bool(scan_findings) and sends_payload and accept_scan_findings
     now = utc_now()

@@ -103,7 +103,9 @@ forces them.
 | CON-40 | Rule catalogue storage | Rules, behaviours and anchors persist and report coverage. | ✅ |
 | CON-41 | AI provider interface | A provider can be configured; absent one, Constat reports evidence and states that no rules were identified. | ✅ D-040, D-041 |
 | CON-42 | Rule generation | An AI pass proposes rules, behaviours and anchors from a ticket's evidence, all as `ai_interpretation`. | 🟡 **in progress** — reply parsing and anchor grounding done (D-046); needs a submit path (CON-49) and either a provider or a host (CON-50) |
-| CON-49 | Submit a reply from outside | A reply produced anywhere becomes grounded proposals via the CLI, under the same gates as the provider path. | ⬜ **next** — prerequisite for CON-50; D-045 |
+| CON-49 | Export the payload through the same gate | The payload can be handed out, and only through the credential gate. | ✅ D-047 — `document --payload` |
+| CON-51 | Proposal storage | A proposal survives the run that produced it and the regeneration of the document body. | ⬜ **next, and a schema change** — blocks CON-52 and overlaps CON-39 |
+| CON-52 | Submit a reply from outside | A reply produced anywhere becomes grounded, stored proposals via the CLI. | ⬜ needs CON-51; D-045, D-046 |
 | CON-50 | MCP server | An MCP client can gather evidence, read the payload and submit proposals; approval is never exposed as a tool. | ⬜ D-045 — needs agreement before building (new infrastructure) |
 | CON-45 | Secret scanning before the payload leaves | A payload containing a credential is refused rather than sent. | ✅ D-044 |
 | CON-47 | Document comments | A comment is stored, attributed and anchored to a durable identity; the body stays machine-written. | ⬜ D-043 — needs CON-39's anchor model |
@@ -161,6 +163,27 @@ address, because dropping a diff line would misstate the change.
 payload — roughly 47,000 tokens, for one ticket in one repository. D-039 called the cost real; this
 is the number. CON-42 should treat payload size as a design constraint rather than discover it on a
 bill.
+
+### CON-49 — a gate with one door was decoration
+
+Done. D-045 created a second front door and that door bypassed both D-040 and D-044, because the
+credential gate was keyed on a provider being configured. `guard_release` is now the single
+chokepoint, and `document --payload` is its first caller besides `gather` (D-047).
+
+**The asymmetry is the decision.** `gather` with no provider scans, reports and continues; an
+export refuses unconditionally. A local run that transmits nothing can tolerate a false positive;
+an export cannot, because by the time it has printed it has left.
+
+**The real-data check is the one that matters.** Subject A has credentials in the documented
+window, and `document --payload` refuses with **zero bytes on stdout**. Before this, the export
+would have handed them to a third-party model. Subject B exports cleanly: 8 commits, 33 files,
+~195 KB, and no identity field on the commit type at all.
+
+**Mutation-checked:** reverting the export to the provider-only gate fails 3 tests, including the
+one asserting stdout stayed empty.
+
+**CON-49 was going to be the submit path too.** It split, because submitting needs somewhere to
+put a proposal and there is nowhere — see CON-51.
 
 ### CON-42 — the trust boundary first, the provider later
 

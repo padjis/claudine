@@ -28,6 +28,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from ..errors import PayloadRefused
 from .redaction import ProviderPayload
 
 COMMIT_MESSAGE = "(commit message)"
@@ -258,6 +259,26 @@ def describe(
     lines += [f"- {finding.describe()}" for finding in findings]
     lines.append("")
     return lines
+
+
+def guard_release(
+    payload: ProviderPayload, *, accepted: bool = False
+) -> tuple[SecretFinding, ...]:
+    """Scan, and refuse unless a human accepted the findings for this run.
+
+    **Call this on every path where the payload leaves the process**, not only
+    where Constat itself sends it. D-044 gated the provider path; an export or
+    submit command is a second front door, and a gate that only covers the
+    first door is decoration.
+
+    Returns the findings so a caller can report them. Raises `PayloadRefused`
+    rather than returning a flag, because a caller that forgets to check a
+    boolean still sends the payload.
+    """
+    findings = scan(payload)
+    if findings and not accepted:
+        raise PayloadRefused(refusal_message(findings))
+    return findings
 
 
 def refusal_message(findings: tuple[SecretFinding, ...]) -> str:
