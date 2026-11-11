@@ -105,7 +105,7 @@ forces them.
 | CON-42 | Rule generation | An AI pass proposes rules, behaviours and anchors from a ticket's evidence, all as `ai_interpretation`. | 🟡 **in progress** — reply parsing and anchor grounding done (D-046); needs rule proposal storage (CON-51), a submit path (CON-52), and a host (CON-50) |
 | CON-49 | Export the payload through the same gate | The payload can be handed out, and only through the credential gate. | ✅ D-047 — `document --payload` |
 | CON-54 | Run identity | One run per invocation, with its operations attached to it. | ✅ D-049 — schema 4; prerequisite for CON-51 |
-| CON-51 | Rule proposal storage, and an append-only catalogue | A rule proposal survives the run that produced it; a rule can be superseded but never removed. | ⬜ **next** — unblocked by CON-54; merges with CON-43 per D-048 |
+| CON-51 | Rule proposal storage, and an append-only catalogue | A rule proposal survives the run that produced it; a rule can be superseded but never removed. | ⬜ **next** — unblocked by CON-54; shape fixed by D-048 and D-050 |
 | CON-53 | Withdraw the manual rule commands | `rule add` / `behaviour` / `anchor` / `remove` are gone, and a trigger aborts `DELETE ON rule`. | ⬜ D-048 — lands with CON-51 |
 | CON-52 | Submit a reply from outside | A reply produced anywhere becomes grounded, stored proposals via the CLI. | ⬜ needs CON-51; D-045, D-046 |
 | CON-50 | MCP server | An MCP client can gather evidence, read the payload and submit proposals; approval is never exposed as a tool. | ⬜ D-045 — needs agreement before building (new infrastructure) |
@@ -113,7 +113,7 @@ forces them.
 | CON-47 | Document comments | A comment is stored, attributed and anchored to a durable identity; the body stays machine-written. | ⬜ D-043 — needs CON-39's anchor model |
 | CON-48 | Comments reach the interpretation pass | Commenting changes the next draft. | ⬜ D-043 — without it, commenting is a suggestion box |
 | CON-46 | A built wheel actually contains the package | Installing the wheel and importing the CLI works, asserted by a test. | ✅ D-042 — discovery replaces the explicit list; `tests/test_packaging.py` builds a wheel and imports from it |
-| CON-43 | Rule maintenance | Evidence contradicting a baselined rule proposes an update to it rather than a duplicate. | ⬜ hardest part of D-039 — **same schema change as CON-51** (D-048: no deletes, so an update is a new version) |
+| CON-43 | Rule maintenance | Evidence contradicting a baselined rule proposes an update to it rather than a duplicate. | ⬜ hardest part of D-039 — **same schema change as CON-51** (D-048: no deletes, so an update is a new version). Matching is an AI judgment, not a key (D-050) |
 | CON-44 | Per-rule review decisions | A reviewer accepts rule changes individually or rejects the implementation as inconclusive, with comments. | ⬜ needs CON-39 first |
 | CON-30 | ~~Surface near-duplicate proposals~~ | — | ❌ **withdrawn.** The problem was an artefact of proposal-per-run; D-029's one-document-per-ticket model does not have it. |
 

@@ -8,6 +8,48 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-050 · 2026-11-11 · Anchors match a rule; they do not identify it
+
+**Decision.** A rule has a **stable surrogate identity** that survives renames, restatements and
+anchor drift. Anchors are the **candidate matcher**: overlapping anchors mean "this rule proposal
+may revise that rule". Whether it actually does is an **AI judgment carried as
+`ai_interpretation`**, accepted or rejected by a human like any other interpretation — not a
+database key.
+
+`rule.name` loses its `UNIQUE` constraint. A name is a label that may change between versions, not
+an identity.
+
+**Context.** Identity had to come from somewhere, and the name is the wrong place: AI-generated
+names drift between runs, so a `UNIQUE` name would fork one rule into two whenever the wording
+changed. Anchors are the better signal — a rule is identified by where it lives rather than what it
+is called.
+
+But anchors cannot be the key. **One file routinely implements several business rules** — a
+`limits.py` can hold both a daily transfer limit and a per-merchant cap — so an anchor-set key
+would collapse distinct rules into one, failing in the opposite direction from duplicates. Path
+globs are too coarse to be unique per rule, and making anchors finer (symbol or line level) would
+be a change to the evidence layer for a benefit a judgment call already provides.
+
+**Consequences.**
+
+- **CON-43 becomes a proposal, not a lookup.** "Evidence contradicting a baselined rule proposes an
+  update rather than a duplicate" is now: find candidates by anchor overlap, let the interpretation
+  pass say which rule is revised, and let a human accept that. The hardest part of D-039 stays hard,
+  but it stays *reviewable*, which a key would not have been.
+- **A wrong match is recoverable.** It is a rejectable interpretation rather than a corrupted
+  identity, so the failure mode is a bad suggestion instead of a merged pair of unrelated rules.
+- **The match itself must be reported.** "This was treated as a revision of rule X" is a claim a
+  reviewer has to see, for the same reason discarded rule proposals are listed (D-046). A silent
+  match would hide the one judgment most likely to be wrong.
+- A rule proposal records which rule it claims to revise; null means it claims to be new.
+- The versioned rule table (CON-51, merged with CON-43 per D-048) hangs off the surrogate id, so
+  supersession is independent of both the name and the anchor set.
+- Several rules sharing an anchor is normal and expected, not a conflict to resolve.
+
+**Status.** accepted
+
+---
+
 ## D-049 · 2026-11-11 · A run has an identity; operations belong to one
 
 **Decision.** Schema 4 adds a `run` table — one row per invocation that touched a document, with

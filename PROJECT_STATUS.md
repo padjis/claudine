@@ -337,10 +337,10 @@ Three things it has to settle, and D-048 fixed the shape of the third:
    rule is a new version, which makes CON-43 and CON-51 the same change. `CON-53` (withdraw the
    manual commands, add the `DELETE ON rule` trigger) lands with it.
 
-**The open question that gates the rule-version table:** what identifies a rule? If it is the
-name, a later rule proposal restating the same rule under a different name creates a duplicate
-rather than a new version — which is exactly the failure CON-43 exists to prevent. That needs
-answering before the schema, not after.
+**Identity is settled (D-050).** A rule has a stable surrogate id; anchors are the candidate
+matcher, not a key. Whether a rule proposal revises an existing rule is an AI judgment carried as
+`ai_interpretation` and accepted by a human — because one file routinely implements several rules,
+so an anchor-set key would collapse distinct rules into one. `rule.name` loses `UNIQUE`.
 
 Still standing: validation is at **zero discovery conversations** (CON-26).
 
