@@ -99,11 +99,13 @@ forces them.
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
 | CON-29 | Ticket-scoped documentation (`constat document <ref>`) | A proposal can be initialised from a reference found in commit messages, across one or more repositories. | 🔁 **promoted** — now the primary workflow, delivered by CON-33/34 |
-| CON-39 | Regeneration must not destroy human edits | Re-running an operation preserves what a reviewer wrote. | ⬜ **blocks CON-12** |
+| CON-39 | Regeneration must not destroy human input | Re-running an operation preserves every comment and decision, each still attached to what it was about. | ⬜ **blocks CON-12** — reframed by D-043: human *edits* no longer exist, so this is now about durable comment anchors |
 | CON-40 | Rule catalogue storage | Rules, behaviours and anchors persist and report coverage. | ✅ |
 | CON-41 | AI provider interface | A provider can be configured; absent one, Constat reports evidence and states that no rules were identified. | ✅ D-040, D-041 |
 | CON-42 | Rule generation | An AI pass proposes rules, behaviours and anchors from a ticket's evidence, all as `ai_interpretation`. | ⬜ **next** — first real API cost; see CON-45 |
 | CON-45 | Secret scanning before the payload leaves | A payload containing a credential is refused rather than sent. | ⬜ **should land with or before CON-42** |
+| CON-47 | Document comments | A comment is stored, attributed and anchored to a durable identity; the body stays machine-written. | ⬜ D-043 — needs CON-39's anchor model |
+| CON-48 | Comments reach the interpretation pass | Commenting changes the next draft. | ⬜ D-043 — without it, commenting is a suggestion box |
 | CON-46 | A built wheel actually contains the package | Installing the wheel and importing the CLI works, asserted by a test. | ✅ D-042 — discovery replaces the explicit list; `tests/test_packaging.py` builds a wheel and imports from it |
 | CON-43 | Rule maintenance | Evidence contradicting a baselined rule proposes an update to it rather than a duplicate. | ⬜ hardest part of D-039 |
 | CON-44 | Per-rule review decisions | A reviewer accepts rule changes individually or rejects the implementation as inconclusive, with comments. | ⬜ needs CON-39 first |
@@ -220,6 +222,12 @@ one of which persisted nothing.
 **The hazard this leaves is CON-39.** The body is regenerated on every run, which is safe only
 while it is entirely machine-derived. The moment a reviewer can edit (CON-12), regeneration
 destroys their work. That must be solved before review ships, not after.
+
+> **Reframed by D-043.** The body is now machine-written *only* — a human comments, validates a
+> rule or rejects an implementation, and never edits. So regeneration destroys no prose. What
+> survives of this hazard is narrower and still real: a comment is anchored to something the next
+> run rewrites. Anchors must be durable identities rather than positions in text. CON-39 keeps the
+> number and gains that as its content.
 
 ### CON-33 — no ticket title, and the first migration
 

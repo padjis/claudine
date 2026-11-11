@@ -283,9 +283,11 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 - **The AI cost is now a measured number, not an estimate.** 8 commits in one repository produce a
   ~47,000-token payload. The registered set is plural by construction, so this scales the wrong
   way, and CON-42 must treat payload size as a design constraint.
-- **CON-39 blocks review.** The document body is regenerated on every run. Safe only while it is
-  entirely machine-derived; the moment a reviewer can edit it (CON-12, CON-44), regeneration
-  destroys their work.
+- **CON-39 blocks review, now in a narrower form (D-043).** The document body is machine-written
+  only — a human comments, validates a rule or rejects an implementation, and never edits — so
+  regeneration destroys no prose. What remains is that a comment is anchored to something the next
+  run rewrites: **anchors must be durable identities, not positions in text.** Still gates CON-12
+  and CON-44, and now also CON-47.
 - **`.venv/` is gitignored and must be recreated per clone** — see the README. On NixOS there is no
   system pip; `python3 -m venv` supplies one via `ensurepip`.
 - **SSH to GitHub does not work from this machine.** The key at `~/.ssh/id_rsa` is 2048-bit RSA,

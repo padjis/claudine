@@ -191,7 +191,11 @@ class Ticket(Frozen):
 class Document(Frozen):
     """The living draft for a ticket.
 
-    Mutable by design (D-029): operations append to it and humans edit it.
+    Mutable by design (D-029), but written **only by operations** (D-043). A
+    human never edits the body: they comment, validate a rule or reject an
+    implementation. Single authorship is what makes every sentence here
+    attributable, which product rule 3 requires.
+
     Authority comes only from a frozen version, never from the draft.
     """
 

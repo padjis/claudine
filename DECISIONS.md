@@ -8,6 +8,61 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-043 · 2026-11-10 · The document is written only by AI; humans comment, validate or reject
+
+**Amends D-029's authorship of the draft**, which had humans editing the document body directly.
+
+**Decision.** The document body is machine-written, always. A human never edits it. Human input
+takes exactly three forms:
+
+| Action | Effect |
+| --- | --- |
+| **Comment** | Free text attached to the document or to one of its parts. Never becomes document content; it is input to the next regeneration. |
+| **Validate a business rule** | Per-rule acceptance (D-037). The rule migrates into the baseline. |
+| **Reject an implementation** | Inconclusive, not wrong (D-036). Another PR is expected. |
+
+Amendments are requested by commenting, not by typing into the body. The AI rewrites; the human
+directs and decides.
+
+**Context.** Two problems dissolve at once.
+
+The first is **CON-39**, raised as a hazard at CON-34 and recorded as blocking CON-12: the body is
+regenerated on every run, which destroys anything a reviewer wrote into it. If nobody writes into
+it, there is nothing to destroy. The hazard was a consequence of mixed authorship, not a flaw in
+regeneration.
+
+The second is **provenance**. A document that is part machine-derived and part hand-edited has no
+way to say which sentence is which, and product rule 3 requires exactly that. Single authorship
+makes every sentence in the body attributable by construction, and human intent stays in comments
+and decisions where it carries its own category.
+
+**Consequences.**
+
+- **CON-39 is not withdrawn; it is transformed.** The residual problem is real and is the same
+  class: a comment is anchored to something, and regeneration rewrites the thing it is anchored to.
+  A comment attached to a rule survives if it is anchored to the rule's identity; a comment
+  attached to a line of rendered prose does not survive the next run. **Comment anchors must be
+  durable identities, not positions in text.** This is now CON-39's actual content, and it still
+  gates CON-12 and CON-44.
+- **Free text gets a home without contradicting D-032.** D-032 dropped the ticket title because
+  unverified human free text had no category in the taxonomy. A comment is not a counter-example:
+  it is never a claim *in* the document, so it asserts nothing. It can only influence what the AI
+  writes next, and whatever the AI then writes is still `ai_interpretation` requiring acceptance.
+  A comment carries no authority and makes no assertion about the product.
+- **The "no automatic approvals" prohibition gets easier to hold.** The body cannot contain an
+  approval, because the body is machine-written and machine output is a proposal by definition
+  (product rule 4). Authority lives only in validated rules and frozen versions.
+- **Rejection does not edit anything either.** It records that the implementation is inconclusive
+  and expects another PR (D-036). It does not mark the write-up wrong.
+- The `Document` docstring in `models.py` said "humans edit it". Corrected.
+- New scope: comments must be stored, attributed and durable — **CON-47** — and must reach the
+  interpretation pass so that commenting actually changes the next draft — **CON-48**. Without
+  CON-48 commenting is a suggestion box.
+
+**Status.** accepted
+
+---
+
 ## D-042 · 2026-11-10 · Packages are discovered, never listed
 
 **Decision.** `pyproject.toml` configures `[tool.setuptools.packages.find]` with
@@ -554,6 +609,10 @@ later operations continue editing the draft, and every approved version stays re
 | --- | --- | --- |
 | Document (draft) | yes — operations append, humans edit | one per ticket, ongoing |
 | Document version | **no** — frozen at approval | one per approval, forever |
+
+> **Authorship amended by D-043.** The draft is written by operations only. Humans comment,
+> validate a rule or reject an implementation; they do not edit the body. The lifetimes above are
+> unchanged.
 
 **Context.** The user's model, and it is better than mine for a reason I had already logged
 without recognising: CON-30 ("re-running `analyse` fills the store with near-duplicate proposals")
