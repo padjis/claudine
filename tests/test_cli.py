@@ -615,6 +615,99 @@ class TestDocumentCommand:
         assert main(["--workspace", ws, "ticket", "add", "901"]) == 5
         assert "does not implement" in capsys.readouterr().err
 
+    def test_the_credential_scan_reports_even_when_clean(self, tmp_path, capsys):
+        """A scan that only speaks when it fails cannot be told apart from a
+        scan that never ran."""
+        ws = self._setup(tmp_path)
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "document", "622"]) == 0
+        out = capsys.readouterr().out
+        assert "credential scan: no findings" in out
+        assert "known formats only" in out
+
+    def _setup_with_secret(self, tmp_path):
+        """A ticket whose pending commit adds an AWS documentation example key."""
+        ws = str(tmp_path / "ws")
+        main(["--workspace", ws, "init"])
+        source = tmp_path / "src"
+        source.mkdir()
+        git(source, "init", "--initial-branch=main", "--quiet")
+        (source / "a.py").write_text("x = 1\n")
+        git(source, "add", "a.py")
+        git(source, "commit", "-m", "Initial")
+
+        clone = tmp_path / "clone"
+        git(tmp_path, "clone", "--quiet", str(source), str(clone))
+        git(clone, "checkout", "--quiet", "-b", "develop")
+        (clone / "a.py").write_text("KEY = 'AKIAIOSFODNN7EXAMPLE'\n")
+        git(clone, "add", "a.py")
+        git(clone, "commit", "-m", "Wire up the client (#622)")
+        git(clone, "checkout", "--quiet", "main")
+        main(["--workspace", ws, "repo", "add", str(clone), "--name", "billing"])
+        main(["--workspace", ws, "ticket", "add", "622"])
+        return ws
+
+    def _configure_provider(self, monkeypatch):
+        """Put a fake provider in the real registry, as a user would configure
+        a real one."""
+        from constat.ai import settings
+        from test_ai import FakeProvider
+
+        monkeypatch.setitem(settings.PROVIDERS, "fake", lambda env: FakeProvider())
+        monkeypatch.setenv("CONSTAT_AI_PROVIDER", "fake")
+
+    def test_a_credential_refuses_the_run_with_the_provider_exit_code(
+        self, tmp_path, capsys, monkeypatch
+    ):
+        ws = self._setup_with_secret(tmp_path)
+        self._configure_provider(monkeypatch)
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "document", "622"]) == 5
+        err = capsys.readouterr().err
+        assert "refusing to send" in err
+        assert "a.py" in err
+        assert "--accept-scan-findings" in err
+
+    def test_the_refusal_does_not_print_the_credential(
+        self, tmp_path, capsys, monkeypatch
+    ):
+        """stderr goes into terminal scrollback and CI logs."""
+        ws = self._setup_with_secret(tmp_path)
+        self._configure_provider(monkeypatch)
+        capsys.readouterr()
+
+        main(["--workspace", ws, "document", "622"])
+        captured = capsys.readouterr()
+        assert "AKIAIOSFODNN7EXAMPLE" not in captured.err
+        assert "AKIAIOSFODNN7EXAMPLE" not in captured.out
+
+    def test_the_override_lets_the_run_through(self, tmp_path, capsys, monkeypatch):
+        ws = self._setup_with_secret(tmp_path)
+        self._configure_provider(monkeypatch)
+        capsys.readouterr()
+
+        code = main(
+            ["--workspace", ws, "document", "622", "--accept-scan-findings"]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "1 possible credential(s) found" in out
+        assert "accepted via --accept-scan-findings" in out
+
+    def test_with_no_provider_a_credential_does_not_block_the_run(
+        self, tmp_path, capsys
+    ):
+        """Nothing is being sent, so there is nothing to protect."""
+        ws = self._setup_with_secret(tmp_path)
+        capsys.readouterr()
+
+        assert main(["--workspace", ws, "document", "622"]) == 0
+        out = capsys.readouterr().out
+        assert "1 possible credential(s) found" in out
+        assert "nothing was sent" in out
+
     def test_the_provider_exit_code_is_distinct(self):
         """Guard against a future edit collapsing the codes."""
         from constat.cli import (

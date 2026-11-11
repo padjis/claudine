@@ -103,7 +103,7 @@ forces them.
 | CON-40 | Rule catalogue storage | Rules, behaviours and anchors persist and report coverage. | ✅ |
 | CON-41 | AI provider interface | A provider can be configured; absent one, Constat reports evidence and states that no rules were identified. | ✅ D-040, D-041 |
 | CON-42 | Rule generation | An AI pass proposes rules, behaviours and anchors from a ticket's evidence, all as `ai_interpretation`. | ⬜ **next** — first real API cost; see CON-45 |
-| CON-45 | Secret scanning before the payload leaves | A payload containing a credential is refused rather than sent. | ⬜ **should land with or before CON-42** |
+| CON-45 | Secret scanning before the payload leaves | A payload containing a credential is refused rather than sent. | ✅ D-044 |
 | CON-47 | Document comments | A comment is stored, attributed and anchored to a durable identity; the body stays machine-written. | ⬜ D-043 — needs CON-39's anchor model |
 | CON-48 | Comments reach the interpretation pass | Commenting changes the next draft. | ⬜ D-043 — without it, commenting is a suggestion box |
 | CON-46 | A built wheel actually contains the package | Installing the wheel and importing the CLI works, asserted by a test. | ✅ D-042 — discovery replaces the explicit list; `tests/test_packaging.py` builds a wheel and imports from it |
@@ -159,6 +159,37 @@ address, because dropping a diff line would misstate the change.
 payload — roughly 47,000 tokens, for one ticket in one repository. D-039 called the cost real; this
 is the number. CON-42 should treat payload size as a design constraint rather than discover it on a
 bill.
+
+### CON-45 — real evidence changed the implementation twice
+
+Done. Known formats only, refusal at the point of transmission, overridable once and on the record
+(D-044).
+
+The design decision that paid off was **separating the scan from the refusal**. Scanning every run
+means a false positive cannot block a local run that sends nothing, and the scanner is not dead
+code until CON-42 — the mistake D-040 avoided by running redaction on the default path.
+
+**Two rounds against real commits, each of which changed the code.**
+
+1. A first pass flagged a `token`-named variable assigned an expression — ordinary source, not a
+   credential. That produced the code-expression rule. One refusal of that kind is enough to teach
+   someone to pass `--accept-scan-findings` without reading it, which would make the whole control
+   decorative.
+2. A wider pass over a different stack produced **true positives**. That is the feature justifying
+   itself before it had a provider to protect.
+
+A "bare identifier" rejection rule was tried in between and removed: a real credential and a
+variable name are the same shape. Character-class variety does that work, with a stricter
+threshold for unquoted values — quoting being the only signal that a value is a literal, and one
+that cannot be required because a `.env` file has none.
+
+**Per the repository owner's instruction, nothing identifying what was found is recorded here.**
+Findings belong in a workspace document, not in a public backlog. The test fixtures use synthetic
+lines and published documentation examples for the same reason.
+
+**The miss list is the honest part.** A passphrase of one character class, a base64 credential
+beginning with `+`, and anything without a recognisable shape all go undetected. `scan` returning
+nothing is not a statement that the payload is clean, and the rendered section says so.
 
 ### CON-46 — found while checking a claim, not while looking for it
 

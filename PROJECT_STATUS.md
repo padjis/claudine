@@ -1,8 +1,8 @@
 # Project status
 
-**Last updated:** 2026-11-10
+**Last updated:** 2026-11-11
 **Current phase:** Phase 3 — Meaning and reporting (reshaped by D-035 … D-039)
-**Current session:** CON-42 — rule generation (CON-40, CON-41 and CON-46 closed)
+**Current session:** CON-42 — rule generation (CON-40, CON-41, CON-45 and CON-46 closed)
 
 ---
 
@@ -277,9 +277,9 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
   subpackage from the wheel from CON-04 onwards, unnoticed because the development install is
   editable. Now discovered rather than listed, with `tests/test_packaging.py` building a wheel and
   importing from it.
-- **Secret scanning is not solved (CON-45).** Commit messages and diffs do leave the machine once a
-  provider is configured, and a leaked credential in a diff would be sent with everything else.
-  Should land with or before CON-42.
+- **Secret scanning is in place (CON-45, D-044), with stated misses.** Known formats only, so a
+  passphrase of one character class or any credential with no recognisable shape is not detected.
+  An empty scan is not a clean bill of health, and the document says so rather than implying one.
 - **The AI cost is now a measured number, not an estimate.** 8 commits in one repository produce a
   ~47,000-token payload. The registered set is plural by construction, so this scales the wrong
   way, and CON-42 must treat payload size as a design constraint.
@@ -327,11 +327,69 @@ Before writing it, two things CON-41 measured should shape the design rather tha
 1. **Payload size is a design constraint, not a detail.** 8 commits in *one* repository produced
    ~47,000 tokens. D-039 called the cost real; that is the number. The registered set is plural by
    construction (D-027), so this scales the wrong way.
-2. **CON-45 (secret scanning) should land with or before it.** Identity no longer crosses the
-   boundary, but a leaked credential in a diff would be sent as readily as anything else.
+2. **The safety gates are now in place.** Identity does not cross the boundary (D-040) and a
+   credential-bearing payload is refused (D-044). CON-42 is no longer gated on either — what gates
+   it is whether anyone wants the output.
 
 And the standing reminder: validation is still at **zero discovery conversations** (CON-26). CON-42
 is where this project starts paying a provider, with nobody yet asked whether they want the output.
+
+---
+
+## CON-45 — done when: *a payload containing a credential is refused rather than sent* ✅
+
+| Item | Status |
+| --- | --- |
+| `constat/ai/scanning.py` — detectors, `scan`, rendered section, refusal message | ✅ |
+| Known formats only; entropy scoring rejected with a reason | ✅ D-044 |
+| `PayloadRefused` in the `ProviderError` family, exit 5 | ✅ |
+| Refusal before `interpret` **and** before the document is written | ✅ asserted |
+| Scan runs on every run; refusal only where a provider would receive it | ✅ |
+| `--accept-scan-findings`, one run only, recorded as `human_decision` | ✅ on `document` and `ticket add` |
+| Override recorded as a `scan_override` operation | ✅ |
+| A finding never carries the matched text | ✅ four tests |
+| An empty scan is not presented as proof of cleanliness | ✅ asserted on the wording |
+
+### Tests run
+
+```
+.venv/bin/python -m pytest  →  470 passed in 51.61s
+```
+
+67 new tests. The existing 403 needed no changes.
+
+### Mutation-checked
+
+| Regression | Result |
+| --- | --- |
+| The refusal gate made unreachable | **4 tests failed** |
+| `SecretFinding` made to carry the matched text | **4 tests failed** — including the persisted-document one |
+| Scanning restricted to the provider path | **1 test failed** |
+
+The second matters most. A scanner that records what it found would copy the credential into the
+workspace and from there into every frozen version of the document, outliving the repository it
+came from.
+
+### Real evidence changed the implementation twice
+
+| Pass | Result | Consequence |
+| --- | --- | --- |
+| First, 8 commits, ~3,100 diff lines | One **false positive** — a `token`-named variable assigned an expression | The code-expression rule exists because of it |
+| Second, 30 commits, a different stack | **True positives** | The feature justified itself before it had a provider to protect |
+
+After the fix, the first sample scans clean. A "bare identifier" rejection rule was tried in
+between and removed — a real credential and a variable name are the same shape — so character-class
+variety does that work, with a stricter threshold for unquoted values.
+
+**Nothing identifying what was found is recorded in this repository**, by the owner's instruction.
+Findings belong in a workspace document, not in public project files; the test fixtures use
+synthetic lines and published documentation examples for the same reason.
+
+### The honest part
+
+A passphrase of one character class, a base64 credential beginning with `+`, and anything with no
+recognisable shape all go undetected. That is the price of refusals being believable: the second
+time a false refusal happens, the override stops being read.
 
 ---
 

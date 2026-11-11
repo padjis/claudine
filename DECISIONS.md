@@ -8,6 +8,62 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-044 · 2026-11-11 · Credentials are detected by format; a refusal is overridable on the record
+
+**Completes D-040**, which stopped identity crossing the provider boundary and stated plainly that
+credentials in messages and diffs were not solved.
+
+**Decision.** The payload is scanned for credentials before it is sent. Detection is by **known
+format only** — issuer-specified prefixes and lengths, PEM headers, JWT structure, passwords in
+connection strings, and credential-named assignments whose value survives a placeholder, code and
+character-variety test. Entropy scoring is not used.
+
+A payload with findings is **refused** (`PayloadRefused`, exit 5). The refusal is overridable with
+`--accept-scan-findings`, which applies to one run only and is recorded in the document as a
+`human_decision` and as a `scan_override` operation.
+
+**Scanning runs on every run; refusal applies only when a provider would actually receive the
+payload.** Those are deliberately separate.
+
+**Context.** Entropy scoring catches more and is the wrong trade here. It fires on minified
+JavaScript, lockfile integrity hashes and base64 assets, all abundant in the subjects. In a
+governance tool a false refusal blocks real work until someone overrides it, and the second time
+that happens the override stops being read. A detector that is nearly always right is worth more
+than one that catches more.
+
+**Consequences.**
+
+- **The scanner must not become the leak.** A finding records repository, commit, path, line and
+  detector — never the matched text. Anything else would copy the credential into the workspace and
+  from there into every frozen version of the document, outliving the repository it came from. Four
+  tests assert the secret is absent from the finding, the error message, the document body and the
+  stored override record.
+- **Separating scan from refusal keeps two things true.** A false positive cannot block a local run
+  that sends nothing, and the scanner is not dead code until a provider exists — the mistake D-040
+  avoided by running redaction on the default path.
+- **An override with no record is the same as no scan**, so it is written to the document and to
+  the operation log. It is per-run by construction: there is no stored state to make it sticky.
+- **Refusal happens before `interpret` and before the document is written.** A partially written
+  document would record evidence as if the run had succeeded.
+- **Stated misses, in exchange for believable refusals.** A passphrase of one character class is
+  not detected; nor is a base64 credential beginning with `+`; nor any credential with no
+  recognisable shape. `scan` returning nothing is **not** a statement that the payload is clean,
+  and the document says so rather than implying a clean bill of health.
+- **Validated on real evidence, which changed the implementation.** A first pass over real commits
+  produced a false positive — a `token`-named variable assigned an expression — and a second over a
+  wider sample produced true positives. The code-expression rule exists because of the first; the
+  second is why the feature exists. Per the repository owner's instruction, nothing identifying
+  what was found is recorded in this repository: findings belong in a workspace, not in a public
+  decision log.
+- A "bare identifier" rejection rule was tried and removed: a real credential and a variable name
+  are the same shape. Character-class variety does that work instead, with a stricter threshold for
+  unquoted values, since quoting is the only available signal that a value is a literal — and it
+  cannot be required, because a `.env` file has none.
+
+**Status.** accepted
+
+---
+
 ## D-043 · 2026-11-10 · The document is written only by AI; humans comment, validate or reject
 
 **Amends D-029's authorship of the draft**, which had humans editing the document body directly.

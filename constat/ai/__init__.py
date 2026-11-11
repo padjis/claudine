@@ -25,9 +25,12 @@ from .redaction import (
     scrub_diff,
     scrub_message,
 )
+from .scanning import COMMIT_MESSAGE, SecretFinding, refusal_message, scan
+from .scanning import describe as describe_scan
 from .settings import PROVIDER_ENV, resolve
 
 __all__ = [
+    "COMMIT_MESSAGE",
     "NO_PROVIDER_NOTE",
     "NULL_PROVIDER_NAME",
     "PROVIDER_ENV",
@@ -38,8 +41,12 @@ __all__ = [
     "Provider",
     "ProviderPayload",
     "RepositoryContext",
+    "SecretFinding",
+    "describe_scan",
     "redact",
+    "refusal_message",
     "resolve",
+    "scan",
     "scrub_diff",
     "scrub_message",
 ]

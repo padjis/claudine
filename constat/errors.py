@@ -66,6 +66,15 @@ class ProviderNotConfigured(ProviderError):
     """
 
 
+class PayloadRefused(ProviderError):
+    """A payload was not sent because it contains a credential (CON-45).
+
+    A provider error rather than a repository one: the repository is fine and
+    the evidence is correct. What failed is the decision to transmit it.
+    Overridable per run, explicitly and on the record — never silently.
+    """
+
+
 class RepositoryError(ConstatError):
     """The repository or a revision within it could not be read.
 

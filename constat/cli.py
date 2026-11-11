@@ -127,6 +127,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     document.add_argument("reference", metavar="REF")
     document.add_argument(
+        "--accept-scan-findings",
+        action="store_true",
+        help=(
+            "send the evidence to the AI provider even though the credential "
+            "scan found something. Recorded in the document as a human "
+            "decision; applies to this run only."
+        ),
+    )
+    document.add_argument(
         "--show", action="store_true", help="print the document body"
     )
 
@@ -143,6 +152,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     ticket_add = ticket_actions.add_parser("add", help="open a ticket")
     ticket_add.add_argument("reference", metavar="REF", help="e.g. 622, ABC-123")
+    ticket_add.add_argument(
+        "--accept-scan-findings",
+        action="store_true",
+        help=(
+            "as on `document`: send the evidence despite credential-scan "
+            "findings. `ticket add` gathers, so it can be refused too."
+        ),
+    )
 
     ticket_actions.add_parser("list", help="list tickets")
 
@@ -354,6 +371,26 @@ def _run_rule(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     return EXIT_USAGE  # pragma: no cover
 
 
+def _print_scan(result) -> None:
+    """Report the credential scan.
+
+    The clean case is printed too. A scan that only speaks when it fails
+    cannot be told apart from a scan that never ran.
+    """
+    findings = result.scan_findings
+    if not findings:
+        print("  credential scan: no findings (known formats only)")
+        return
+
+    print(f"  credential scan: {len(findings)} possible credential(s) found")
+    for finding in findings:
+        print(f"    {finding.describe()}")
+    if result.scan_accepted:
+        print("  accepted via --accept-scan-findings and recorded in the document")
+    else:
+        print("  nothing was sent — no AI provider is configured")
+
+
 def _print_interpretation(interpretation) -> None:
     """Report the rules outcome of a run.
 
@@ -382,7 +419,11 @@ def _print_interpretation(interpretation) -> None:
 def _run_document(args: argparse.Namespace) -> int:
     try:
         with Workspace.open(args.workspace) as workspace:
-            result = gather(workspace, args.reference)
+            result = gather(
+                workspace,
+                args.reference,
+                accept_scan_findings=args.accept_scan_findings,
+            )
     except WorkspaceError as exc:
         print(f"{PROG}: error: {exc}", file=sys.stderr)
         return EXIT_WORKSPACE
@@ -406,6 +447,7 @@ def _run_document(args: argparse.Namespace) -> int:
         detail = finding.error or f"{len(finding.commits)} commit(s)"
         print(f"    {finding.repository.alias}: {finding.status.value} — {detail}")
 
+    _print_scan(result)
     _print_interpretation(result.interpretation)
     print()
     print("Use --show to print the document. It is a draft: nothing here is")
@@ -429,7 +471,11 @@ def _run_ticket(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
                 # Fill the document immediately. Opening a ticket and then
                 # requiring a second command to populate it would leave an
                 # empty document lying around that says nothing.
-                result = gather(workspace, entry.reference)
+                result = gather(
+                    workspace,
+                    entry.reference,
+                    accept_scan_findings=args.accept_scan_findings,
+                )
                 print(
                     f"  {result.repositories_searched} repository(ies) searched, "
                     f"{result.repositories_contributing} contributed evidence"
@@ -440,6 +486,7 @@ def _run_ticket(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
                         f"    {finding.repository.alias}: "
                         f"{finding.status.value} — {detail}"
                     )
+                _print_scan(result)
                 _print_interpretation(result.interpretation)
                 print()
                 print(f"Document written. See it with `constat document "

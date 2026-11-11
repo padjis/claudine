@@ -19,9 +19,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .ai import Interpretation, Provider, redact
+from .ai import (
+    NULL_PROVIDER_NAME,
+    Interpretation,
+    Provider,
+    SecretFinding,
+    describe_scan,
+    redact,
+    refusal_message,
+    scan,
+)
 from .ai import resolve as resolve_provider
-from .errors import RepositoryError
+from .errors import PayloadRefused, RepositoryError
 from .evidence import DEFAULT_LIMITS, EvidenceBundle, ExcerptLimits, collect_evidence
 from .git.adapter import Repository, Revision, discover_repository, resolve_revision
 from .git.diff import compare_revisions
@@ -64,6 +73,8 @@ class OperationResult:
     findings: tuple[RepositoryFindings, ...]
     body: str
     interpretation: Interpretation | None = None
+    scan_findings: tuple[SecretFinding, ...] = ()
+    scan_accepted: bool = False
 
     @property
     def repositories_searched(self) -> int:
@@ -197,6 +208,7 @@ def render(
     reference: str,
     findings: tuple[RepositoryFindings, ...],
     interpretation: Interpretation | None = None,
+    scan_section: list[str] | None = None,
 ) -> str:
     """Render the machine-derived part of a document.
 
@@ -204,9 +216,10 @@ def render(
     nothing. Silence about a repository is indistinguishable from "no changes
     there", and the two are not the same claim.
 
-    `interpretation` is optional only so the evidence rendering stays callable
-    on its own. When it is absent the rules section is omitted entirely rather
-    than being rendered as empty, because an empty section is itself a claim.
+    `interpretation` and `scan_section` are optional only so the evidence
+    rendering stays callable on its own. When either is absent its section is
+    omitted entirely rather than rendered as empty, because an empty section is
+    itself a claim.
     """
     lines: list[str] = [f"# Ticket {reference}", ""]
 
@@ -286,6 +299,9 @@ def render(
             lines.append(bundle.completeness_note())
             lines.append("")
 
+    if scan_section:
+        lines += scan_section
+
     if interpretation is not None:
         lines += _render_rules(interpretation)
 
@@ -312,6 +328,7 @@ def gather(
     reference: str,
     limits: ExcerptLimits = DEFAULT_LIMITS,
     provider: Provider | None = None,
+    accept_scan_findings: bool = False,
 ) -> OperationResult:
     """Run the gathering operation for a ticket and expand its document.
 
@@ -319,6 +336,16 @@ def gather(
     misconfiguration fails immediately rather than after the expensive part.
     With none configured this is the null provider and nothing leaves the
     machine.
+
+    The payload is scanned for credentials on every run, and refused if any are
+    found *and* a provider would actually receive it (CON-45). Scanning always
+    but refusing only at the point of transmission keeps two things true at
+    once: a false positive cannot block a local run that sends nothing, and the
+    scanner is not dead code until a provider exists.
+
+    `accept_scan_findings` overrides the refusal for this run only. It is
+    recorded in the document and as an operation, because an override nobody
+    can see afterwards is indistinguishable from no scan at all.
     """
     if provider is None:
         provider = resolve_provider()
@@ -335,9 +362,28 @@ def gather(
     # exists. A privacy boundary first exercised by the code that needs it is
     # a boundary first tested in production.
     payload = redact(reference, findings)
+
+    scan_findings = scan(payload)
+    sends_payload = provider.name != NULL_PROVIDER_NAME
+    if scan_findings and sends_payload and not accept_scan_findings:
+        # Refused before `interpret`, and before the document is written. A
+        # partially updated document would be worse than none: it would record
+        # evidence as if the run had succeeded.
+        raise PayloadRefused(refusal_message(scan_findings))
+
+    accepted = bool(scan_findings) and sends_payload and accept_scan_findings
+    now = utc_now()
+    scan_section = describe_scan(
+        payload,
+        scan_findings,
+        sent=sends_payload,
+        accepted=accepted,
+        accepted_at=now if accepted else None,
+    )
+
     interpretation = provider.interpret(payload)
 
-    body = render(reference, findings, interpretation)
+    body = render(reference, findings, interpretation, scan_section)
 
     document_id = workspace.execute(
         "SELECT d.id FROM document d JOIN ticket t ON t.id = d.ticket_id "
@@ -345,12 +391,26 @@ def gather(
         (reference,),
     ).fetchone()["id"]
 
-    now = utc_now()
     with workspace.transaction() as ws:
         ws.execute(
             "UPDATE document SET body = ?, updated_at = ? WHERE id = ?",
             (body, now, document_id),
         )
+        if accepted:
+            # Recorded against the document rather than a repository: the
+            # decision was about the payload as a whole. The locations are kept
+            # so the override stays auditable; the matched text never is.
+            ws.execute(
+                "INSERT INTO operation "
+                "(document_id, repository_id, kind, ran_at, summary, payload) "
+                "VALUES (?, NULL, 'scan_override', ?, ?, ?)",
+                (
+                    document_id,
+                    now,
+                    f"accepted {len(scan_findings)} credential-scan finding(s)",
+                    "\n".join(f.describe() for f in scan_findings),
+                ),
+            )
         for finding in findings:
             repository_id = ws.execute(
                 "SELECT id FROM repository WHERE alias = ?",
@@ -373,4 +433,6 @@ def gather(
         findings=findings,
         body=body,
         interpretation=interpretation,
+        scan_findings=scan_findings,
+        scan_accepted=accepted,
     )
