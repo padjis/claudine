@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-11
 **Current phase:** Phase 3 — Meaning and reporting (reshaped by D-035 … D-039)
-**Current session:** CON-44 — per-rule review decisions (CON-52 closed)
+**Current session:** CON-55 — propose a revision (CON-43, CON-44 closed)
 
 ---
 
@@ -324,29 +324,84 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-**CON-44 — per-rule review decisions**, or **CON-50** (the MCP server).
+**CON-55 — propose a revision, not just a new rule.** The last piece of rule maintenance:
+`candidates_for` finds rules by anchor overlap, but nothing calls it, so every submitted reading
+claims to be new. Until it does, a second reading of the same rule creates a second rule — the
+duplicate CON-43 exists to prevent, arriving by a different route.
 
-The loop now runs end to end *except* for accepting anything:
+Then **CON-50** (the MCP server), which needs agreeing first.
+
+**The loop is otherwise complete:**
 
 ```
 constat document 622 --payload        # evidence out, through the gate
 <any model, anywhere>                 # produces a reply
 constat rule submit 622 --from -      # grounded, stored, discards reported
 constat rule proposals 622            # the review queue
+constat rule accept 1 --by emmanuel   # baselines a frozen version
+constat rule history 1                # the chain back to the evidence
 ```
 
-What is missing is the last step. `RuleProposals.decide` exists and is tested, but there is no
-command for it, and **accepting does not write into the catalogue** — that needs the versioned rule
-table, which merges with CON-43. So CON-44 is really: a decide command, the versioned catalogue,
-and the id-keyed `Catalogue` API together.
-
-**CON-50** (the MCP server) wraps the two commands above and needs agreeing first, since
-`CLAUDE.md` requires agreement for new infrastructure.
-
-Also open: the document body still reflects the run that wrote it, so a submitted reading is stored
-but not rendered there. Rendering from stored readings belongs with the display work (CON-09).
+Also open: the document body still reflects the run that wrote it, so accepted rules are not
+rendered there (CON-09), and comments do not exist yet (CON-39, CON-47, CON-48).
 
 Still standing: validation is at **zero discovery conversations** (CON-26).
+
+---
+
+## CON-44 — done when: *a reviewer accepts or rejects rule changes individually* ✅
+
+Closing most of **CON-43** with it.
+
+| Item | Status |
+| --- | --- |
+| `rule_version` + behaviours and anchors; schema 6 with a migration | ✅ D-053 |
+| `rule accept` / `rule reject` / `rule history` | ✅ |
+| Accepting baselines a frozen version pointing at the reading accepted | ✅ traceable to a diff |
+| A revision adds version N+1 rather than duplicating the rule | ✅ CON-43's done-when |
+| A name may change between versions; the rule stays one rule | ✅ D-050 |
+| Rejecting changes nothing and is not a dead end | ✅ D-036 |
+| `rule_version` append-only by trigger | ✅ |
+| `--by` has no default | ✅ no automatic approvals, in the parser |
+
+### Tests run
+
+```
+.venv/bin/python -m pytest  →  655 passed in 54.62s
+```
+
+30 new tests. The existing 625 needed no changes.
+
+### Mutation-checked
+
+| Regression | Result |
+| --- | --- |
+| Ignore the revision claim — every acceptance creates a new rule | **6 tests failed** |
+| Rejecting baselines a version anyway | **2 tests failed** |
+| `rule_version` loses its append-only triggers | **2 tests failed** |
+
+### Why a revision is a version and not a duplicate
+
+`revises_rule_id` is the reading's *claim* (D-050), and a human accepting the reading accepts the
+claim with it. Acceptance is therefore the only place the claim takes effect — which is what makes
+a wrong claim a rejectable interpretation rather than a corrupted identity.
+
+### A guard the database made unreachable
+
+A claim to revise a nonexistent rule cannot even be recorded: the foreign key refuses it at write
+time. The acceptance-time guard stays anyway, and the test says why — if the key were ever
+relaxed, the alternative is silently creating a *new* rule when the reviewer accepted a revision.
+
+### Verified on the real workspace
+
+Migrated v5 → v6 with its 8 operations intact, then the reading stored from Subject B's evidence
+was accepted into rule 1, version 1 — with `rule history` showing the chain back to the rule
+proposal and the run.
+
+### What is left of CON-43
+
+The *finding* half. `candidates_for` locates rules by anchor overlap, but nothing calls it, so
+every submitted reading still claims to be new. CON-55.
 
 ---
 

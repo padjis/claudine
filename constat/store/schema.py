@@ -11,7 +11,7 @@ silently; a trigger cannot be bypassed by forgetting to call the right helper.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA = """
 CREATE TABLE schema_meta (
@@ -163,6 +163,38 @@ CREATE TABLE rule_proposal_decision (
     rationale        TEXT
 );
 
+-- A frozen snapshot of a rule at the moment a human accepted a reading of it.
+-- Same split as document/document_version (D-029): `rule` is the current
+-- state, this is the durable history. Append-only — see the triggers below.
+--
+-- `from_rule_proposal_id` is what makes a rule traceable: every version points
+-- at the reading a human accepted to produce it, and that reading points at
+-- the run whose evidence it read.
+CREATE TABLE rule_version (
+    id                    INTEGER PRIMARY KEY,
+    rule_id               INTEGER NOT NULL REFERENCES rule(id),
+    version_no            INTEGER NOT NULL,
+    name                  TEXT    NOT NULL,
+    statement             TEXT    NOT NULL,
+    from_rule_proposal_id INTEGER NOT NULL REFERENCES rule_proposal(id),
+    previous_version_id   INTEGER REFERENCES rule_version(id),
+    created_at            TEXT    NOT NULL,
+    UNIQUE (rule_id, version_no)
+);
+
+CREATE TABLE rule_version_behaviour (
+    id              INTEGER PRIMARY KEY,
+    rule_version_id INTEGER NOT NULL REFERENCES rule_version(id) ON DELETE CASCADE,
+    description     TEXT    NOT NULL
+);
+
+CREATE TABLE rule_version_anchor (
+    id              INTEGER PRIMARY KEY,
+    rule_version_id INTEGER NOT NULL REFERENCES rule_version(id) ON DELETE CASCADE,
+    repository_id   INTEGER REFERENCES repository(id),
+    path_glob       TEXT    NOT NULL
+);
+
 -- A distinct way the application handles a business case under its rule.
 CREATE TABLE behaviour (
     id          INTEGER PRIMARY KEY,
@@ -195,6 +227,9 @@ CREATE INDEX idx_rule_proposal_revises ON rule_proposal(revises_rule_id);
 CREATE INDEX idx_rule_proposal_behaviour ON rule_proposal_behaviour(rule_proposal_id);
 CREATE INDEX idx_rule_proposal_anchor ON rule_proposal_anchor(rule_proposal_id);
 CREATE INDEX idx_rule_proposal_decision ON rule_proposal_decision(rule_proposal_id);
+CREATE INDEX idx_rule_version_rule ON rule_version(rule_id);
+CREATE INDEX idx_rule_version_behaviour ON rule_version_behaviour(rule_version_id);
+CREATE INDEX idx_rule_version_anchor ON rule_version_anchor(rule_version_id);
 
 -- History is durable (product rule 5), enforced here rather than trusted to
 -- callers. A later approval must create a new row; it must never rewrite or
@@ -250,6 +285,22 @@ BEFORE DELETE ON rule_proposal_decision
 BEGIN
     SELECT RAISE(ABORT,
         'rule_proposal_decision is append-only: a recorded decision cannot be deleted');
+END;
+
+-- A baselined rule version is the approved record (product rule 5). A later
+-- acceptance must add a version, never rewrite or remove one.
+CREATE TRIGGER rule_version_is_append_only_update
+BEFORE UPDATE ON rule_version
+BEGIN
+    SELECT RAISE(ABORT,
+        'rule_version is append-only: an accepted version cannot be modified');
+END;
+
+CREATE TRIGGER rule_version_is_append_only_delete
+BEFORE DELETE ON rule_version
+BEGIN
+    SELECT RAISE(ABORT,
+        'rule_version is append-only: an accepted version cannot be deleted');
 END;
 """
 
@@ -399,5 +450,46 @@ MIGRATIONS: dict[int, tuple[str, ...]] = {
         " SELECT RAISE(ABORT,"
         " 'rule_proposal_decision is append-only:"
         " a recorded decision cannot be deleted'); END",
+    ),
+    # 5 -> 6: accepted rule versions (D-053). Rules that predate acceptance
+    # keep no version: they were never accepted, and inventing a version for
+    # them would fabricate an approval.
+    5: (
+        "CREATE TABLE rule_version ("
+        " id INTEGER PRIMARY KEY,"
+        " rule_id INTEGER NOT NULL REFERENCES rule(id),"
+        " version_no INTEGER NOT NULL,"
+        " name TEXT NOT NULL,"
+        " statement TEXT NOT NULL,"
+        " from_rule_proposal_id INTEGER NOT NULL REFERENCES rule_proposal(id),"
+        " previous_version_id INTEGER REFERENCES rule_version(id),"
+        " created_at TEXT NOT NULL,"
+        " UNIQUE (rule_id, version_no))",
+        "CREATE TABLE rule_version_behaviour ("
+        " id INTEGER PRIMARY KEY,"
+        " rule_version_id INTEGER NOT NULL"
+        " REFERENCES rule_version(id) ON DELETE CASCADE,"
+        " description TEXT NOT NULL)",
+        "CREATE TABLE rule_version_anchor ("
+        " id INTEGER PRIMARY KEY,"
+        " rule_version_id INTEGER NOT NULL"
+        " REFERENCES rule_version(id) ON DELETE CASCADE,"
+        " repository_id INTEGER REFERENCES repository(id),"
+        " path_glob TEXT NOT NULL)",
+        "CREATE INDEX idx_rule_version_rule ON rule_version(rule_id)",
+        "CREATE INDEX idx_rule_version_behaviour"
+        " ON rule_version_behaviour(rule_version_id)",
+        "CREATE INDEX idx_rule_version_anchor"
+        " ON rule_version_anchor(rule_version_id)",
+        "CREATE TRIGGER rule_version_is_append_only_update"
+        " BEFORE UPDATE ON rule_version BEGIN"
+        " SELECT RAISE(ABORT,"
+        " 'rule_version is append-only:"
+        " an accepted version cannot be modified'); END",
+        "CREATE TRIGGER rule_version_is_append_only_delete"
+        " BEFORE DELETE ON rule_version BEGIN"
+        " SELECT RAISE(ABORT,"
+        " 'rule_version is append-only:"
+        " an accepted version cannot be deleted'); END",
     ),
 }

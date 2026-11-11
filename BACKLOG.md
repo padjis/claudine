@@ -108,13 +108,14 @@ forces them.
 | CON-51 | Rule proposal storage | A rule proposal survives the run that produced it and the regeneration of the body. | ✅ D-051 — schema 5; the versioned catalogue lands with CON-44 |
 | CON-53 | Withdraw the manual rule commands | `rule add` / `behaviour` / `anchor` / `remove` are gone, and a trigger aborts `DELETE ON rule`. | ✅ D-048 — landed with CON-51 |
 | CON-52 | Submit a reply from outside | A reply produced anywhere becomes grounded, stored rule proposals via the CLI. | ✅ D-052 — `rule submit`, `rule proposals` |
+| CON-55 | Propose a revision, not just a new rule | The interpretation pass fills `revises_rule_id` from anchor-overlap candidates. | ⬜ D-050 — the last piece of rule maintenance |
 | CON-50 | MCP server | An MCP client can gather evidence, read the payload and submit proposals; approval is never exposed as a tool. | ⬜ D-045 — needs agreement before building (new infrastructure) |
 | CON-45 | Secret scanning before the payload leaves | A payload containing a credential is refused rather than sent. | ✅ D-044 |
 | CON-47 | Document comments | A comment is stored, attributed and anchored to a durable identity; the body stays machine-written. | ⬜ D-043 — needs CON-39's anchor model |
 | CON-48 | Comments reach the interpretation pass | Commenting changes the next draft. | ⬜ D-043 — without it, commenting is a suggestion box |
 | CON-46 | A built wheel actually contains the package | Installing the wheel and importing the CLI works, asserted by a test. | ✅ D-042 — discovery replaces the explicit list; `tests/test_packaging.py` builds a wheel and imports from it |
-| CON-43 | Rule maintenance | Evidence contradicting a baselined rule proposes an update to it rather than a duplicate. | ⬜ hardest part of D-039 — **same schema change as CON-51** (D-048: no deletes, so an update is a new version). Matching is an AI judgment, not a key (D-050) |
-| CON-44 | Per-rule review decisions | A reviewer accepts rule changes individually or rejects the implementation as inconclusive, with comments. | ⬜ needs CON-39 first |
+| CON-43 | Rule maintenance | Evidence contradicting a baselined rule proposes an update to it rather than a duplicate. | ✅ D-053 — a revision baselines version N+1 of the same rule. The *finding* of candidates by anchor overlap is in place (`candidates_for`); having the interpretation pass populate `revises_rule_id` is CON-55 |
+| CON-44 | Per-rule review decisions | A reviewer accepts rule changes individually or rejects the implementation as inconclusive, with comments. | ✅ D-053 — `rule accept` / `reject` / `history` |
 | CON-30 | ~~Surface near-duplicate proposals~~ | — | ❌ **withdrawn.** The problem was an artefact of proposal-per-run; D-029's one-document-per-ticket model does not have it. |
 
 ## Workspace model (D-027, D-028, D-029)
@@ -165,6 +166,32 @@ address, because dropping a diff line would misstate the change.
 payload — roughly 47,000 tokens, for one ticket in one repository. D-039 called the cost real; this
 is the number. CON-42 should treat payload size as a design constraint rather than discover it on a
 bill.
+
+### CON-44 — the loop closes
+
+Done, and most of CON-43 with it. `rule accept` baselines a frozen version that points back at the
+reading accepted; `rule reject` records inconclusive and leaves the catalogue alone; `rule history`
+shows the chain (D-053).
+
+**A revision adds a version rather than duplicating the rule** — CON-43's done-when. It works
+because `revises_rule_id` is a claim and accepting the reading accepts the claim (D-050), so
+acceptance is the only place the claim takes effect. What is left of CON-43 is having the
+interpretation pass *fill* that claim from anchor-overlap candidates: `candidates_for` exists, but
+nothing calls it yet. That is CON-55.
+
+**`--by` has no default**, which is the no-automatic-approvals prohibition expressed in the
+argument parser rather than in a comment.
+
+**Mutation-checked:** ignoring the revision claim fails 6 tests; rejecting that baselines a version
+fails 2; removing `rule_version`'s append-only triggers fails 2.
+
+**A guard the database made unreachable.** A claim to revise a nonexistent rule cannot even be
+recorded — the foreign key refuses it. The acceptance-time guard stays anyway, and the test says
+why: if the key were ever relaxed, the alternative is silently creating a new rule when the
+reviewer accepted a revision.
+
+**Verified on the real workspace:** migrated v5 → v6 with its 8 operations intact, then the stored
+reading from Subject B was accepted into rule 1 version 1.
 
 ### CON-52 — the inbound half, and a false rejection caught by a test
 

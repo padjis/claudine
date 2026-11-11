@@ -4,6 +4,7 @@ The workspace holds registered repositories, tickets, documents and the
 immutable record of approvals (D-027, D-029).
 """
 
+from .acceptance import Acceptance, Review
 from .catalogue import Catalogue
 from .proposals import RuleProposals, StoredRuleProposal
 from .registry import Registry
@@ -12,7 +13,9 @@ from .schema import SCHEMA_VERSION
 from .workspace import Workspace, database_path, utc_now, workspace_home
 
 __all__ = [
+    "Acceptance",
     "Catalogue",
+    "Review",
     "RuleProposals",
     "StoredRuleProposal",
     "Registry",

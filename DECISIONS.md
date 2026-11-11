@@ -8,6 +8,48 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-053 · 2026-11-11 · Accepting a rule proposal baselines a version; rejecting changes nothing
+
+**Closes CON-44, and most of CON-43.** Schema 6.
+
+**Decision.** `rule_version` is a frozen snapshot of a rule at the moment a human accepted a
+reading of it, append-only by trigger. `rule` remains the current state — the same split
+`document`/`document_version` already uses (D-029). Accepting a reading that claims to revise a
+rule appends the next version; accepting one that claims to be new creates the rule at version 1.
+
+**Rejecting changes nothing in the catalogue.** Under D-036 it means *inconclusive*, so there is
+nothing to unwind, and a rejected reading can still be accepted later.
+
+**Context.** Rule proposals could be stored but never acted on. D-037 required acceptance to be
+per-rule and human; this is that act, and it is the only way a rule enters or changes (D-048).
+
+**Consequences.**
+
+- **Every rule version names the reading it came from** (`from_rule_proposal_id`), and that
+  reading names the run whose evidence it read (D-049). A rule is therefore traceable to a diff
+  without storing the diff.
+- **A revision is a version, not a duplicate** — CON-43's done-when. It works because
+  `revises_rule_id` is the reading's claim and a human accepting the reading accepts the claim
+  (D-050). Acceptance is the only place the claim takes effect.
+- **A name may change between versions** and the rule stays one rule, which is what D-050's
+  surrogate identity was for.
+- **`rule` is mutable and that is deliberate**, for the same reason `document.body` is: it is the
+  working view, and the durable record is the frozen version beside it. Behaviours and anchors are
+  replaced on acceptance; their history lives in `rule_version_behaviour` / `_anchor`.
+- **Accepting twice is refused** — it would baseline a second identical version.
+- **A claim to revise a rule that does not exist cannot even be recorded**: the foreign key refuses
+  it. `Review._target_rule` refuses it again at acceptance, unreachable while the key holds and
+  kept because the alternative — silently creating a *new* rule when the reviewer accepted a
+  revision — is exactly the duplicate CON-43 exists to prevent.
+- **`--by` has no default.** There is no way to accept without naming who decided, which is the
+  no-automatic-approvals prohibition expressed in the argument parser.
+- Rules that predate acceptance keep no version. They were never accepted, and inventing one would
+  fabricate an approval.
+
+**Status.** accepted
+
+---
+
 ## D-052 · 2026-11-11 · A submitted reply is grounded against re-gathered evidence
 
 **Decision.** `constat rule submit <REF>` takes a reply produced outside Constat and stores the

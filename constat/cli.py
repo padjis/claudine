@@ -19,6 +19,7 @@ from .evidence import collect_evidence, describe_commit
 from .mapping import change_proposal, commit_record, state_proposal
 from .store import (
     Catalogue,
+    Review,
     Registry,
     RuleProposals,
     TicketStore,
@@ -132,6 +133,41 @@ def build_parser() -> argparse.ArgumentParser:
     rule_submit.add_argument(
         "--model", default=None, help="model name, also self-reported"
     )
+
+    rule_accept = rule_actions.add_parser(
+        "accept",
+        help="accept a rule proposal, baselining a rule version",
+        description=(
+            "Accept one reading. This is the only way a rule enters or changes "
+            "in the catalogue (D-048), and it is a human act — it baselines a "
+            "frozen version that points back at the reading accepted."
+        ),
+    )
+    rule_accept.add_argument("proposal_id", metavar="ID", type=int)
+    rule_accept.add_argument(
+        "--by", required=True, metavar="WHO", help="who is accepting"
+    )
+    rule_accept.add_argument("--rationale", default=None)
+
+    rule_reject = rule_actions.add_parser(
+        "reject",
+        help="reject a rule proposal as inconclusive",
+        description=(
+            "Reject one reading. Under D-036 this means inconclusive — another "
+            "PR is expected — not that the rule is wrong. The catalogue is "
+            "left untouched."
+        ),
+    )
+    rule_reject.add_argument("proposal_id", metavar="ID", type=int)
+    rule_reject.add_argument(
+        "--by", required=True, metavar="WHO", help="who is rejecting"
+    )
+    rule_reject.add_argument("--rationale", default=None)
+
+    rule_history = rule_actions.add_parser(
+        "history", help="show every accepted version of a rule"
+    )
+    rule_history.add_argument("rule_id", metavar="RULE_ID", type=int)
 
     rule_proposals = rule_actions.add_parser(
         "proposals", help="list the rule proposals awaiting a decision"
@@ -430,6 +466,47 @@ def _run_rule(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
                     model=args.model,
                 )
                 return _report_submission(result)
+
+            if args.rule_action == "accept":
+                result = Review(workspace).accept(
+                    args.proposal_id, decided_by=args.by, rationale=args.rationale
+                )
+                verb = "created" if result.created_rule else "revised"
+                print(
+                    f"accepted: rule {result.rule_id} {verb}, "
+                    f"version {result.version_no} baselined"
+                )
+                print()
+                print("The version is frozen and points back at the reading")
+                print("you accepted. See it with `constat rule history "
+                      f"{result.rule_id}`.")
+                return EXIT_OK
+
+            if args.rule_action == "reject":
+                Review(workspace).reject(
+                    args.proposal_id, decided_by=args.by, rationale=args.rationale
+                )
+                print(f"rejected: rule proposal {args.proposal_id}")
+                print()
+                print("Recorded as inconclusive, not as wrong (D-036). The")
+                print("catalogue is unchanged and another reading is expected.")
+                return EXIT_OK
+
+            if args.rule_action == "history":
+                versions = Review(workspace).versions(args.rule_id)
+                if not versions:
+                    print(f"rule {args.rule_id} has no accepted versions.")
+                    return EXIT_OK
+                print(f"{len(versions)} version(s) of rule {args.rule_id}:")
+                for v in versions:
+                    who = v["decided_by"] or "(unknown)"
+                    print(f"  v{v['version_no']}  {v['name']}")
+                    print(f"      {v['statement']}")
+                    print(
+                        f"      accepted by {who} from rule proposal "
+                        f"{v['from_rule_proposal_id']}"
+                    )
+                return EXIT_OK
 
             if args.rule_action == "proposals":
                 return _report_proposals(
