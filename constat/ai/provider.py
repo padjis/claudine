@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 from ..models import RuleProposal
+from .parsing import Rejection
 from .redaction import ProviderPayload
 
 NULL_PROVIDER_NAME = "none"
@@ -47,10 +48,19 @@ class Interpretation:
     proposals: tuple[RuleProposal, ...] = ()
     model: str | None = None
     note: str = ""
+    rejections: tuple[Rejection, ...] = ()
+    """Proposals the provider returned that were discarded, with reasons. Part
+    of the result rather than a log line: a document showing two rules when the
+    provider offered eight has misrepresented the pass (product rule 3)."""
 
     @property
     def identified_rules(self) -> bool:
         return bool(self.proposals)
+
+    @property
+    def has_output(self) -> bool:
+        """Whether the provider said anything at all, kept or discarded."""
+        return bool(self.proposals or self.rejections)
 
     @property
     def ran(self) -> bool:

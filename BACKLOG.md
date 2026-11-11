@@ -102,7 +102,9 @@ forces them.
 | CON-39 | Regeneration must not destroy human input | Re-running an operation preserves every comment and decision, each still attached to what it was about. | ⬜ **blocks CON-12** — reframed by D-043: human *edits* no longer exist, so this is now about durable comment anchors |
 | CON-40 | Rule catalogue storage | Rules, behaviours and anchors persist and report coverage. | ✅ |
 | CON-41 | AI provider interface | A provider can be configured; absent one, Constat reports evidence and states that no rules were identified. | ✅ D-040, D-041 |
-| CON-42 | Rule generation | An AI pass proposes rules, behaviours and anchors from a ticket's evidence, all as `ai_interpretation`. | ⬜ **next** — first real API cost; see CON-45 |
+| CON-42 | Rule generation | An AI pass proposes rules, behaviours and anchors from a ticket's evidence, all as `ai_interpretation`. | 🟡 **in progress** — reply parsing and anchor grounding done (D-046); needs a submit path (CON-49) and either a provider or a host (CON-50) |
+| CON-49 | Submit a reply from outside | A reply produced anywhere becomes grounded proposals via the CLI, under the same gates as the provider path. | ⬜ **next** — prerequisite for CON-50; D-045 |
+| CON-50 | MCP server | An MCP client can gather evidence, read the payload and submit proposals; approval is never exposed as a tool. | ⬜ D-045 — needs agreement before building (new infrastructure) |
 | CON-45 | Secret scanning before the payload leaves | A payload containing a credential is refused rather than sent. | ✅ D-044 |
 | CON-47 | Document comments | A comment is stored, attributed and anchored to a durable identity; the body stays machine-written. | ⬜ D-043 — needs CON-39's anchor model |
 | CON-48 | Comments reach the interpretation pass | Commenting changes the next draft. | ⬜ D-043 — without it, commenting is a suggestion box |
@@ -159,6 +161,30 @@ address, because dropping a diff line would misstate the change.
 payload — roughly 47,000 tokens, for one ticket in one repository. D-039 called the cost real; this
 is the number. CON-42 should treat payload size as a design constraint rather than discover it on a
 bill.
+
+### CON-42 — the trust boundary first, the provider later
+
+In progress. What landed is the half that needs no provider and is required either way: a parser
+that turns a reply into proposals, refuses what it cannot use, and **checks every anchor against
+the paths actually supplied** (D-046).
+
+Anchor grounding is the part worth keeping. A model will propose a rule anchored to a
+plausible-sounding path whether or not that path was in the payload, and storing it would mean the
+tool invented its own evidence — the inverse of product rule 2. It costs nothing to check, so it
+is checked. Verified on both real subjects (30 and 72 grounding paths): grounded replies kept,
+invented anchors rejected, prose replies refused.
+
+**Mutation-checked**, since everything passed first try: swallowing a bad reply as "no rules"
+fails 14 tests, removing the grounding check fails 3, and never rendering rejections fails 2.
+
+**What is left, and why it split.** D-045 changed the shape of the remainder: the agent surface is
+an MCP server, not a provider Constat calls, so the next step is a **submit path** (CON-49) rather
+than an HTTP client. The parser is provider-agnostic by construction — it takes `(text, payload)`
+and does not care where the text came from — which is what makes that pivot cheap.
+
+**Prerequisite that must not be forgotten:** redaction and credential refusal gate on
+`provider.name != NULL_PROVIDER_NAME`. A submit or export command is a new front door, and the
+same gate has to apply to it, or D-040 and D-044 become decorative.
 
 ### CON-45 — real evidence changed the implementation twice
 

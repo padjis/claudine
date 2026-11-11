@@ -66,6 +66,16 @@ class ProviderNotConfigured(ProviderError):
     """
 
 
+class MalformedResponse(ProviderError):
+    """A provider's reply could not be parsed into proposals (CON-42).
+
+    An error rather than an empty result. Returning no proposals for an
+    unparseable reply would make the document read "no rules were identified",
+    presenting a provider failure as a finding — the same substitution D-041
+    refused for a misconfigured provider.
+    """
+
+
 class PayloadRefused(ProviderError):
     """A payload was not sent because it contains a credential (CON-45).
 

@@ -150,6 +150,29 @@ def _collect_repository(
     )
 
 
+def _render_rejections(interpretation: Interpretation) -> list[str]:
+    """List proposals the provider offered and the parser discarded.
+
+    Omitting these would show a reviewer two rules when the provider offered
+    eight, which misstates what the pass did. The reasons matter too: an
+    ungrounded anchor means the model invented a path, and a reviewer should
+    know that happened.
+    """
+    if not interpretation.rejections:
+        return []
+
+    lines = [
+        f"{len(interpretation.rejections)} proposal(s) returned by "
+        f"{interpretation.describe()} were **discarded** before reaching this "
+        "document, for the reasons given. They are listed because a silently "
+        "shortened list would misstate what the pass produced.",
+        "",
+    ]
+    lines += [f"- {rejection.describe()}" for rejection in interpretation.rejections]
+    lines.append("")
+    return lines
+
+
 def _render_rules(interpretation: Interpretation) -> list[str]:
     """Render the rules section, which always appears.
 
@@ -166,7 +189,7 @@ def _render_rules(interpretation: Interpretation) -> list[str]:
             or "No rules were identified. That is not a statement that none exist.",
             "",
         ]
-        return lines
+        return lines + _render_rejections(interpretation)
 
     lines += [
         f"{len(interpretation.proposals)} rule(s) proposed by "
@@ -201,7 +224,7 @@ def _render_rules(interpretation: Interpretation) -> list[str]:
                 "future change.",
                 "",
             ]
-    return lines
+    return lines + _render_rejections(interpretation)
 
 
 def render(

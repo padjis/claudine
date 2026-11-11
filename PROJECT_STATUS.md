@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-11
 **Current phase:** Phase 3 — Meaning and reporting (reshaped by D-035 … D-039)
-**Current session:** CON-42 — rule generation (CON-40, CON-41, CON-45 and CON-46 closed)
+**Current session:** CON-42 — rule generation, in progress (CON-40, CON-41, CON-45, CON-46 closed)
 
 ---
 
@@ -18,8 +18,14 @@ which changed paths no rule claims (CON-40).
 **No rules are produced yet, and nothing deterministic can produce them** — D-035 settled that a
 rule is a business statement no code signal yields, and D-039 made generation an AI pass. CON-41
 built the seam for it: the provider registry is deliberately empty, nothing leaves the machine, and
-the document states that no rules were *identified* rather than implying none exist. Generation is
-CON-42. No Markdown report is rendered yet: CON-09.
+the document states that no rules were *identified* rather than implying none exist.
+
+CON-42 is in progress. The trust boundary on AI output exists — a reply is parsed, every anchor is
+checked against the evidence actually supplied, and an unusable reply is refused rather than
+silently emptied (D-046). What does not exist is something to produce the reply, and **D-045
+changed what that will be**: the agent surface is an MCP server, so the host supplies the model and
+the next step is a submit path (CON-49) rather than an HTTP client. No Markdown report is rendered
+yet: CON-09.
 
 **Q1 is closed.** All ten original open questions from Session 01 are now resolved.
 
@@ -318,21 +324,78 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-**CON-42 — rule generation.** An AI pass proposes rules, behaviours and anchors from a ticket's
-evidence, all as `ai_interpretation`. The seam, the payload and the no-provider path exist; what is
-missing is a provider in the registry and a prompt.
+**CON-49 — submit a reply from outside.** A reply produced anywhere becomes grounded proposals via
+the CLI. This is the prerequisite D-045 created: the agent surface is an MCP server rather than a
+provider Constat calls, so the next step is a submit path, not an HTTP client.
 
-Before writing it, two things CON-41 measured should shape the design rather than surprise it:
+Two things must be true of it, and the second is a real hole:
 
-1. **Payload size is a design constraint, not a detail.** 8 commits in *one* repository produced
-   ~47,000 tokens. D-039 called the cost real; that is the number. The registered set is plural by
-   construction (D-027), so this scales the wrong way.
-2. **The safety gates are now in place.** Identity does not cross the boundary (D-040) and a
-   credential-bearing payload is refused (D-044). CON-42 is no longer gated on either — what gates
-   it is whether anyone wants the output.
+1. **It runs D-046's parser unchanged.** `parse(text, payload)` does not care where the text came
+   from, which is the whole reason the direction change was cheap.
+2. **It passes the same gates as the provider path.** Redaction (D-040) and credential refusal
+   (D-044) currently fire only when `provider.name != NULL_PROVIDER_NAME`. A submit or export
+   command is a new front door; if the gate does not apply there, D-040 and D-044 are decorative.
 
-And the standing reminder: validation is still at **zero discovery conversations** (CON-26). CON-42
-is where this project starts paying a provider, with nobody yet asked whether they want the output.
+Then **CON-50** (the MCP server) — which needs agreeing first, since `CLAUDE.md` requires
+agreement for new infrastructure.
+
+Still standing: validation is at **zero discovery conversations** (CON-26). D-045 removes the
+per-call cost objection to CON-42 (the host pays for inference), but it does not answer whether
+anyone wants the output.
+
+---
+
+## CON-42 — in progress: the trust boundary landed, the provider did not 🟡
+
+| Item | Status |
+| --- | --- |
+| `constat/ai/parsing.py` — `parse`, `ParseResult`, `Rejection` | ✅ D-046 |
+| An unusable reply raises `MalformedResponse`, never returns empty | ✅ exit 5 |
+| Every anchor checked against paths actually in the payload | ✅ the property with teeth |
+| An ungrounded or unanchored proposal is rejected whole, with a reason | ✅ |
+| Rejections reach the `Interpretation`, the document and the CLI | ✅ |
+| A rejection carries only the name and reason, never the model's prose | ✅ |
+| Code fences unwrapped; bare-string anchors accepted | ✅ pragmatism about real replies |
+| A provider in the registry, and a prompt | ⬜ reshaped by D-045 into CON-49 / CON-50 |
+
+### Tests run
+
+```
+.venv/bin/python -m pytest  →  520 passed in 30.26s
+```
+
+50 new tests. The existing 470 needed no changes.
+
+### Mutation-checked
+
+| Regression | Result |
+| --- | --- |
+| A bad reply swallowed as "no rules found" | **14 tests failed** |
+| The anchor-grounding check removed | **3 tests failed** |
+| Rejections never rendered into the document | **2 tests failed** |
+
+### Anchor grounding is the part worth keeping
+
+A model will propose a rule anchored to a plausible-sounding path whether or not that path was in
+the payload. Storing it would mean Constat had **invented its own evidence** — the inverse of
+product rule 2. The check costs nothing, so it is made, and it is deliberately fatal to the whole
+proposal: keeping the grounded half of a two-anchor rule would silently narrow a claim the model
+meant more broadly, which is a different claim rather than a smaller one.
+
+### Verified on both real subjects
+
+| | Grounding paths | Grounded reply | Invented anchor | Prose reply |
+| --- | --- | --- | --- | --- |
+| Subject B, 8 commits | 30 | kept | rejected | refused |
+| Subject A, 30 commits | 72 | kept | rejected | refused |
+
+### One test that was passing for the wrong reason
+
+The first version of the rejection-rendering tests called `render` with an empty findings tuple.
+`render` returns early when nothing was searched, so both assertions ran against the "no
+repositories are registered" branch and told me nothing. Caught because the assertion failed, not
+because I checked — worth remembering that an early return makes a downstream assertion vacuous
+rather than false.
 
 ---
 

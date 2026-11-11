@@ -401,6 +401,14 @@ def _print_interpretation(interpretation) -> None:
     if interpretation is None:
         return
 
+    if interpretation.rejections:
+        # Printed before the kept count: a reviewer who sees only the kept
+        # number has been told a shorter truth than the one that happened.
+        print(
+            f"  {len(interpretation.rejections)} proposal(s) discarded as "
+            "ungrounded or malformed"
+        )
+
     if interpretation.identified_rules:
         print(
             f"  {len(interpretation.proposals)} rule(s) proposed by "
