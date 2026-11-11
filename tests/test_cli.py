@@ -722,18 +722,27 @@ class TestDocumentCommand:
 
 
 class TestRuleCommands:
+    """Read-only after D-048. A rule enters only as an accepted rule proposal
+    and can never be removed, so the authoring commands are gone."""
+
     def _ws(self, tmp_path):
         target = str(tmp_path / "ws")
         main(["--workspace", target, "init"])
         return target
 
-    def test_declare_show_and_list(self, tmp_path, capsys):
-        ws = self._ws(tmp_path)
-        capsys.readouterr()
+    def _a_rule(self, ws: str) -> None:
+        """Seeded through the storage API, because there is no command."""
+        from constat.store import Catalogue, Workspace
 
-        assert main(["--workspace", ws, "rule", "add", "limit", "At most the limit."]) == 0
-        assert main(["--workspace", ws, "rule", "behaviour", "limit", "Refused above."]) == 0
-        assert main(["--workspace", ws, "rule", "anchor", "limit", "rules.py"]) == 0
+        with Workspace.open(ws) as workspace:
+            catalogue = Catalogue(workspace)
+            catalogue.add_rule("limit", "At most the limit.")
+            catalogue.add_behaviour("limit", "Refused above.")
+            catalogue.add_anchor("limit", "rules.py")
+
+    def test_show_and_list_still_work(self, tmp_path, capsys):
+        ws = self._ws(tmp_path)
+        self._a_rule(ws)
         capsys.readouterr()
 
         assert main(["--workspace", ws, "rule", "show", "limit"]) == 0
@@ -742,14 +751,29 @@ class TestRuleCommands:
         assert "Refused above." in shown
         assert "rules.py" in shown
 
-    def test_a_new_rule_is_told_it_cannot_match_anything(self, tmp_path, capsys):
-        """An unanchored rule is inert; saying so prevents silent uselessness."""
-        ws = self._ws(tmp_path)
-        capsys.readouterr()
+        assert main(["--workspace", ws, "rule", "list"]) == 0
+        assert "limit" in capsys.readouterr().out
 
-        main(["--workspace", ws, "rule", "add", "limit", "At most the limit."])
-        out = capsys.readouterr().out
-        assert "can never be matched" in out
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["rule", "add", "limit", "At most."],
+            ["rule", "behaviour", "limit", "Refused above."],
+            ["rule", "anchor", "limit", "rules.py"],
+            ["rule", "remove", "limit"],
+        ],
+    )
+    def test_the_authoring_commands_are_gone(self, tmp_path, argv):
+        """D-048: no human-authored path into the catalogue, and no removal.
+
+        argparse rejects the unknown subcommand with exit 2 — the command does
+        not exist rather than existing and refusing, so there is nothing to
+        rediscover in a later release.
+        """
+        ws = self._ws(tmp_path)
+        with pytest.raises(SystemExit) as exc:
+            main(["--workspace", ws, *argv])
+        assert exc.value.code == 2
 
     def test_an_empty_catalogue_explains_the_consequence(self, tmp_path, capsys):
         """No rules must not read as "nothing is affected"."""
@@ -758,24 +782,16 @@ class TestRuleCommands:
 
         assert main(["--workspace", ws, "rule", "list"]) == 0
         out = capsys.readouterr().out
-        assert "No rules declared" in out
-        assert "not the same as nothing changing" in out
+        assert "No rules in the catalogue" in out
+        assert "not the same as" in out
 
-    def test_duplicate_declaration_exits_four(self, tmp_path, capsys):
+    def test_the_empty_message_says_where_rules_come_from(self, tmp_path, capsys):
+        """A reader who cannot find an `add` command needs telling why."""
         ws = self._ws(tmp_path)
-        main(["--workspace", ws, "rule", "add", "limit", "At most."])
         capsys.readouterr()
 
-        assert main(["--workspace", ws, "rule", "add", "limit", "At most."]) == 4
-        assert "already exists" in capsys.readouterr().err
-
-    def test_remove_withdraws_the_rule(self, tmp_path, capsys):
-        ws = self._ws(tmp_path)
-        main(["--workspace", ws, "rule", "add", "limit", "At most."])
-        capsys.readouterr()
-
-        assert main(["--workspace", ws, "rule", "remove", "limit"]) == 0
-        assert "withdrawn" in capsys.readouterr().out
+        main(["--workspace", ws, "rule", "list"])
+        assert "accepted rule proposal" in capsys.readouterr().out
 
     def test_show_an_unknown_rule_exits_four(self, tmp_path, capsys):
         ws = self._ws(tmp_path)

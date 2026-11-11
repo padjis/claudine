@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-11
 **Current phase:** Phase 3 — Meaning and reporting (reshaped by D-035 … D-039)
-**Current session:** CON-51 — rule proposal storage (CON-54 closed; CON-42 in progress)
+**Current session:** CON-52 — submit a reply (CON-51, CON-53, CON-54 closed)
 
 ---
 
@@ -324,25 +324,73 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-**CON-51 — rule proposal storage, and an append-only catalogue.** Unblocked: a run now has an
-identity to reference (D-049).
+**CON-52 — submit a reply from outside.** Unblocked: there is now somewhere to put a rule proposal.
 
-Three things it has to settle, and D-048 fixed the shape of the third:
+It runs D-046's parser unchanged and stores the result through `RuleProposals.record`. The gate is
+already shared (D-047), so the submit path inherits it rather than needing its own.
 
-1. **Rule proposals are append-only.** A rule proposal is a dated, attributed reading of one
-   evidence set — it cannot be edited, so a later run makes a new one and "current" is derived.
-2. **The decision lives in its own table**, as `document_version` does, so accepting or rejecting
-   a rule proposal does not mutate the reading.
-3. **The catalogue becomes versioned**, because D-048 removed deletion: an update to a baselined
-   rule is a new version, which makes CON-43 and CON-51 the same change. `CON-53` (withdraw the
-   manual commands, add the `DELETE ON rule` trigger) lands with it.
+Then **CON-50** (the MCP server), which needs agreeing first — `CLAUDE.md` requires agreement for
+new infrastructure.
 
-**Identity is settled (D-050).** A rule has a stable surrogate id; anchors are the candidate
-matcher, not a key. Whether a rule proposal revises an existing rule is an AI judgment carried as
-`ai_interpretation` and accepted by a human — because one file routinely implements several rules,
-so an anchor-set key would collapse distinct rules into one. `rule.name` loses `UNIQUE`.
+**Deferred deliberately:** acceptance does not yet write into the catalogue. That needs the
+versioned rule table, which merges with CON-43 and lands with the acceptance flow (CON-44). The
+`Catalogue` API is still name-keyed and goes id-keyed at the same time.
 
 Still standing: validation is at **zero discovery conversations** (CON-26).
+
+---
+
+## CON-51 — done when: *a rule proposal survives the run that produced it* ✅
+
+With CON-53 (withdraw the manual rule commands) landing alongside it.
+
+| Item | Status |
+| --- | --- |
+| `rule_proposal` + behaviours, anchors, decisions; schema 5 with a migration | ✅ D-051 |
+| Append-only: `UPDATE` and `DELETE` abort by trigger | ✅ readings and decisions both |
+| A decision does not mutate the reading | ✅ separate table, as `document_version` |
+| Changing one's mind appends; both stay visible | ✅ latest displays |
+| Self-reported reader recorded (`provider`, `model`) | ✅ D-045 — a claim, not a fact |
+| `revises_rule_id` nullable — a claim, not a key | ✅ D-050 |
+| `gather` persists what the provider returned | ✅ survives the next regeneration |
+| `rule` cannot be deleted | ✅ trigger (D-048) |
+| `rule add` / `behaviour` / `anchor` / `remove` gone | ✅ CON-53 |
+| `rule.name` lost `UNIQUE` | ✅ in the schema — see the honest limit below |
+
+### Tests run
+
+```
+.venv/bin/python -m pytest  →  594 passed in 44.13s
+```
+
+30 new tests. Eight CLI tests covering the removed commands went with them, and two catalogue
+withdrawal tests became "removal is now impossible".
+
+### Mutation-checked
+
+| Regression | Result |
+| --- | --- |
+| The append-only triggers removed | **5 tests failed** |
+| `gather` stops persisting what the provider returned | **3 tests failed** |
+| The migration forgets to copy `behaviour` rows | **1 test failed** |
+
+### The riskiest migration so far
+
+Dropping `rule.name`'s `UNIQUE` needs a table rebuild, and `rule` is the parent of `behaviour` and
+`anchor` with `ON DELETE CASCADE` — so dropping the parent alone would have silently emptied the
+catalogue. All three are rebuilt, children dropped first, renames last so the new children's
+foreign keys are rewritten to match.
+
+Verified on a real v4 workspace: migrated to 5 with its **8 operations and 1 run** intact, and the
+four `rule_proposal*` tables usable afterwards rather than merely present.
+
+### An honest limit: half the change landed
+
+`Catalogue` is still **name-keyed**. `add_rule` keeps an application-level duplicate guard and
+`find` looks up by name, so two rules cannot share a name *through the API* even though the schema
+now allows it. That guard is a leftover of the pre-D-050 model and goes when the catalogue becomes
+id-keyed and versioned (CON-43, with CON-44). The test asserts the schema rather than the API, and
+says why — rather than asserting a behaviour that does not exist yet.
 
 ---
 

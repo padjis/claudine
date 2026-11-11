@@ -7,6 +7,8 @@ someone declared, so what it fails to claim must stay visible.
 
 from __future__ import annotations
 
+import sqlite3
+
 from pathlib import Path
 
 import pytest
@@ -105,21 +107,52 @@ class TestDeclaring:
         with pytest.raises(AlreadyRegistered, match="already has that anchor"):
             catalogue.add_anchor("daily-limit", "rules.py")
 
-    def test_withdrawing_a_rule_takes_its_parts(self, workspace: Workspace, catalogue: Catalogue):
+    def test_a_rule_cannot_be_deleted(
+        self, workspace: Workspace, catalogue: Catalogue
+    ):
+        """D-048: supersession replaces removal, enforced by trigger.
+
+        A catalogue that can be emptied by a `DELETE` is protected by
+        convention only, and the convention is what a future bug forgets —
+        the same reasoning as `document_version` (CON-31).
+        """
         a_rule(catalogue)
-        catalogue.add_behaviour("daily-limit", "Refused above the limit.")
-        catalogue.add_anchor("daily-limit", "rules.py")
 
-        catalogue.remove_rule("daily-limit")
+        with pytest.raises(sqlite3.DatabaseError, match="cannot be removed"):
+            workspace.execute("DELETE FROM rule WHERE name = 'daily-limit'")
 
-        assert catalogue.list() == ()
-        for table in ("behaviour", "anchor"):
-            count = workspace.execute(f"SELECT COUNT(*) c FROM {table}").fetchone()["c"]
-            assert count == 0, f"{table} rows outlived their rule"
+        assert len(catalogue.list()) == 1
 
-    def test_withdrawing_an_unknown_rule_is_refused(self, catalogue: Catalogue):
-        with pytest.raises(NotRegistered, match="no rule"):
-            catalogue.remove_rule("nope")
+    def test_the_storage_api_has_no_removal(self):
+        """The command went, and so did the method behind it. Leaving the
+        method would make the prohibition a CLI detail rather than a rule."""
+        assert not hasattr(Catalogue, "remove_rule")
+
+    def test_the_schema_no_longer_makes_a_name_unique(self, workspace: Workspace):
+        """`rule.name` lost UNIQUE (D-050): a name is a label that may change
+        between versions, and identity is the surrogate id.
+
+        Asserted against the schema, not through `Catalogue`, because the
+        application API is still name-keyed — `add_rule` keeps its own
+        duplicate guard and `find` looks up by name. That guard is a leftover
+        of the pre-D-050 model and goes when the catalogue becomes id-keyed and
+        versioned (CON-43). The constraint it used to rely on is gone now, so
+        this records which half has moved.
+        """
+        now = "2026-11-11T00:00:00Z"
+        workspace.execute(
+            "INSERT INTO rule (name, statement, created_at) VALUES (?, ?, ?)",
+            ("daily-limit", "One reading.", now),
+        )
+        workspace.execute(
+            "INSERT INTO rule (name, statement, created_at) VALUES (?, ?, ?)",
+            ("daily-limit", "A different reading of the same name.", now),
+        )
+
+        count = workspace.execute(
+            "SELECT COUNT(*) c FROM rule WHERE name = 'daily-limit'"
+        ).fetchone()["c"]
+        assert count == 2
 
 
 class TestMatching:

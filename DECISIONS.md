@@ -8,6 +8,44 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-051 · 2026-11-11 · A rule proposal is stored append-only; its decision is a separate record
+
+**Implements D-048 and D-050.** Schema 5.
+
+**Decision.** `rule_proposal` stores each reading with its run, its self-reported reader
+(`provider`, `model`) and its claim about which rule it revises. `rule_proposal_decision` stores a
+human's answer separately. Both abort `UPDATE` and `DELETE` by trigger; so does `rule`.
+
+**Context.** A rule proposal previously lived for one `gather()` call and was rendered into a
+document body that the next run regenerates — so a reading could not survive long enough for
+anyone to accept it. D-037 makes acceptance per-rule and human, which requires durable
+pre-acceptance state.
+
+**Consequences.**
+
+- **A decision does not mutate the reading**, the shape `document_version` uses (CON-31).
+  Accepting leaves the reading exactly as the reviewer saw it.
+- **Changing one's mind appends.** Both decisions stay visible; the latest is what displays.
+  History rather than a correction to be hidden (product rule 5).
+- **`revises_rule_id` is nullable and is a claim, not a key** (D-050). Null means the reading
+  claims to be new.
+- **An anchor naming an unregistered repository keeps its glob and loses its scope.** Losing the
+  reading would be worse than losing the scope.
+- **`rule.name` lost `UNIQUE`,** which needed rebuilding `rule` plus its two cascading children —
+  dropping the parent alone would have taken the catalogue with it. Verified: a real v4 workspace
+  migrated with its rows intact.
+- **One half has not moved.** `Catalogue` is still name-keyed: `add_rule` keeps an
+  application-level duplicate guard and `find` looks up by name, so two rules cannot yet share a
+  name through the API even though the schema allows it. That guard is a leftover of the pre-D-050
+  model and goes when the catalogue becomes id-keyed and versioned (CON-43). Recorded rather than
+  quietly left.
+- Acceptance does not yet write into the catalogue — that needs the versioned rule table, and
+  lands with the acceptance flow (CON-44).
+
+**Status.** accepted
+
+---
+
 ## D-050 · 2026-11-11 · Anchors match a rule; they do not identify it
 
 **Decision.** A rule has a **stable surrogate identity** that survives renames, restatements and

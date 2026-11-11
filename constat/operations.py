@@ -36,7 +36,7 @@ from .evidence import DEFAULT_LIMITS, EvidenceBundle, ExcerptLimits, collect_evi
 from .git.adapter import Repository, Revision, discover_repository, resolve_revision
 from .git.diff import compare_revisions
 from .models import RegisteredRepository
-from .store import Registry, TicketStore, Workspace
+from .store import Registry, RuleProposals, TicketStore, Workspace
 from .store.workspace import utc_now
 from .tickets import TicketMatch, TicketStatus, find_ticket_commits
 
@@ -576,6 +576,18 @@ def gather(
                     f"{finding.status.value}: {len(finding.commits)} commit(s)",
                 ),
             )
+
+    # Stored after the document is written, and separately from it: a rule
+    # proposal is a reading that must survive the next regeneration of the body
+    # it was rendered into (D-048). Rendering it is display; this is the record.
+    proposals = RuleProposals(workspace)
+    for proposal in interpretation.proposals:
+        proposals.record(
+            run_id=run_id,
+            proposal=proposal,
+            provider=interpretation.provider,
+            model=interpretation.model,
+        )
 
     return OperationResult(
         reference=reference,

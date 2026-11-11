@@ -94,14 +94,6 @@ class Catalogue:
         assert found is not None
         return found
 
-    def remove_rule(self, name: str) -> Rule:
-        found = self.find(name)
-        if found is None:
-            known = ", ".join(r.name for r in self.list()) or "none"
-            raise NotRegistered(f"no rule {name!r}. Declared: {known}.")
-        self._workspace.execute("DELETE FROM rule WHERE name = ?", (name,))
-        return found
-
     # -- reading -----------------------------------------------------------
 
     def find(self, name: str) -> Rule | None:

@@ -11,7 +11,7 @@ silently; a trigger cannot be bypassed by forgetting to call the right helper.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA = """
 CREATE TABLE schema_meta (
@@ -100,14 +100,67 @@ CREATE TABLE operation (
     payload       TEXT
 );
 
--- A business rule, declared by a person (D-038). Not inferred from code:
--- under D-035 a rule is a business statement, and a migration or annotation
--- is at most evidence that one exists.
+-- A business rule. Under D-035 a rule is a business statement, and no code
+-- signal produces one; under D-048 it enters the catalogue only as an accepted
+-- rule proposal, and can never be removed — see the trigger below.
+--
+-- `name` is not UNIQUE (D-050). A name is a label that may change between
+-- versions; identity is this surrogate id, which survives renames,
+-- restatements and anchor drift. Anchors only *match* a rule.
 CREATE TABLE rule (
     id          INTEGER PRIMARY KEY,
-    name        TEXT    NOT NULL UNIQUE,
+    name        TEXT    NOT NULL,
     statement   TEXT    NOT NULL,
     created_at  TEXT    NOT NULL
+);
+
+-- A rule proposal: a dated, attributed reading of the evidence one run
+-- gathered (D-046, D-048). Not a rule yet, and never edited — a later run
+-- makes a new reading rather than mutating this one, so "current" is derived.
+--
+-- `revises_rule_id` is the reading's own claim about which rule it revises,
+-- found by anchor overlap and decided by the interpretation pass (D-050). NULL
+-- means it claims to be new. It is a claim, not a key: a wrong one is a
+-- rejectable interpretation rather than a corrupted identity.
+--
+-- `model` is self-reported by whatever produced the reading (D-045), so it is
+-- nearer `assumption` than `observed_fact` and must never be presented as the
+-- latter.
+CREATE TABLE rule_proposal (
+    id              INTEGER PRIMARY KEY,
+    run_id          INTEGER NOT NULL REFERENCES run(id) ON DELETE CASCADE,
+    name            TEXT    NOT NULL,
+    statement       TEXT    NOT NULL,
+    revises_rule_id INTEGER REFERENCES rule(id),
+    provider        TEXT    NOT NULL,
+    model           TEXT,
+    created_at      TEXT    NOT NULL
+);
+
+CREATE TABLE rule_proposal_behaviour (
+    id               INTEGER PRIMARY KEY,
+    rule_proposal_id INTEGER NOT NULL REFERENCES rule_proposal(id) ON DELETE CASCADE,
+    description      TEXT    NOT NULL
+);
+
+CREATE TABLE rule_proposal_anchor (
+    id               INTEGER PRIMARY KEY,
+    rule_proposal_id INTEGER NOT NULL REFERENCES rule_proposal(id) ON DELETE CASCADE,
+    repository_id    INTEGER REFERENCES repository(id),
+    path_glob        TEXT    NOT NULL
+);
+
+-- A human's answer to one rule proposal. Separate from the reading so that
+-- accepting or rejecting does not mutate it — the same shape `document_version`
+-- uses for documents (CON-31). `rejected` means inconclusive, not wrong
+-- (D-036), so a later reading of better evidence is expected.
+CREATE TABLE rule_proposal_decision (
+    id               INTEGER PRIMARY KEY,
+    rule_proposal_id INTEGER NOT NULL REFERENCES rule_proposal(id),
+    decision         TEXT    NOT NULL CHECK (decision IN ('accepted', 'rejected')),
+    decided_by       TEXT    NOT NULL,
+    decided_at       TEXT    NOT NULL,
+    rationale        TEXT
 );
 
 -- A distinct way the application handles a business case under its rule.
@@ -137,6 +190,11 @@ CREATE INDEX idx_document_version_document ON document_version(document_id);
 CREATE INDEX idx_operation_document ON operation(document_id);
 CREATE INDEX idx_operation_run ON operation(run_id);
 CREATE INDEX idx_run_document ON run(document_id);
+CREATE INDEX idx_rule_proposal_run ON rule_proposal(run_id);
+CREATE INDEX idx_rule_proposal_revises ON rule_proposal(revises_rule_id);
+CREATE INDEX idx_rule_proposal_behaviour ON rule_proposal_behaviour(rule_proposal_id);
+CREATE INDEX idx_rule_proposal_anchor ON rule_proposal_anchor(rule_proposal_id);
+CREATE INDEX idx_rule_proposal_decision ON rule_proposal_decision(rule_proposal_id);
 
 -- History is durable (product rule 5), enforced here rather than trusted to
 -- callers. A later approval must create a new row; it must never rewrite or
@@ -153,6 +211,45 @@ BEFORE DELETE ON document_version
 BEGIN
     SELECT RAISE(ABORT,
         'document_version is append-only: approved versions cannot be deleted');
+END;
+
+-- A rule cannot be removed (D-048). Enforced here because a catalogue that can
+-- be emptied by a DELETE is protected by convention only, and the convention
+-- is what a future bug forgets.
+CREATE TRIGGER rule_cannot_be_deleted
+BEFORE DELETE ON rule
+BEGIN
+    SELECT RAISE(ABORT,
+        'a rule cannot be removed: supersede it with a new accepted rule proposal');
+END;
+
+-- A rule proposal is a reading, fixed at the moment it was made. Editing one
+-- would rewrite what a reviewer was shown; deleting one would erase that it was
+-- ever offered, which is the same loss D-046 refuses for discarded readings.
+CREATE TRIGGER rule_proposal_is_append_only_update
+BEFORE UPDATE ON rule_proposal
+BEGIN
+    SELECT RAISE(ABORT, 'rule_proposal is append-only: a reading cannot be edited');
+END;
+
+CREATE TRIGGER rule_proposal_is_append_only_delete
+BEFORE DELETE ON rule_proposal
+BEGIN
+    SELECT RAISE(ABORT, 'rule_proposal is append-only: a reading cannot be deleted');
+END;
+
+CREATE TRIGGER rule_proposal_decision_is_append_only_update
+BEFORE UPDATE ON rule_proposal_decision
+BEGIN
+    SELECT RAISE(ABORT,
+        'rule_proposal_decision is append-only: a recorded decision cannot be modified');
+END;
+
+CREATE TRIGGER rule_proposal_decision_is_append_only_delete
+BEFORE DELETE ON rule_proposal_decision
+BEGIN
+    SELECT RAISE(ABORT,
+        'rule_proposal_decision is append-only: a recorded decision cannot be deleted');
 END;
 """
 
@@ -202,5 +299,105 @@ MIGRATIONS: dict[int, tuple[str, ...]] = {
         "ALTER TABLE operation ADD COLUMN run_id INTEGER REFERENCES run(id)",
         "CREATE INDEX idx_operation_run ON operation(run_id)",
         "CREATE INDEX idx_run_document ON run(document_id)",
+    ),
+    # 4 -> 5: rule proposals (D-046, D-048), and rule.name loses UNIQUE
+    # (D-050).
+    #
+    # Dropping a constraint needs a table rebuild, and `rule` is the parent of
+    # `behaviour` and `anchor` with ON DELETE CASCADE — so dropping it alone
+    # would cascade the catalogue away. All three are rebuilt instead, children
+    # first on the way out. Renaming `rule_new` to `rule` rewrites the new
+    # children's foreign keys to match, which is why the renames come last.
+    4: (
+        "CREATE TABLE rule_new ("
+        " id INTEGER PRIMARY KEY,"
+        " name TEXT NOT NULL,"
+        " statement TEXT NOT NULL,"
+        " created_at TEXT NOT NULL)",
+        "INSERT INTO rule_new (id, name, statement, created_at)"
+        " SELECT id, name, statement, created_at FROM rule",
+        "CREATE TABLE behaviour_new ("
+        " id INTEGER PRIMARY KEY,"
+        " rule_id INTEGER NOT NULL REFERENCES rule_new(id) ON DELETE CASCADE,"
+        " description TEXT NOT NULL,"
+        " created_at TEXT NOT NULL,"
+        " UNIQUE (rule_id, description))",
+        "INSERT INTO behaviour_new (id, rule_id, description, created_at)"
+        " SELECT id, rule_id, description, created_at FROM behaviour",
+        "CREATE TABLE anchor_new ("
+        " id INTEGER PRIMARY KEY,"
+        " rule_id INTEGER NOT NULL REFERENCES rule_new(id) ON DELETE CASCADE,"
+        " repository_id INTEGER REFERENCES repository(id) ON DELETE CASCADE,"
+        " path_glob TEXT NOT NULL,"
+        " created_at TEXT NOT NULL,"
+        " UNIQUE (rule_id, repository_id, path_glob))",
+        "INSERT INTO anchor_new (id, rule_id, repository_id, path_glob, created_at)"
+        " SELECT id, rule_id, repository_id, path_glob, created_at FROM anchor",
+        "DROP TABLE anchor",
+        "DROP TABLE behaviour",
+        "DROP TABLE rule",
+        "ALTER TABLE rule_new RENAME TO rule",
+        "ALTER TABLE behaviour_new RENAME TO behaviour",
+        "ALTER TABLE anchor_new RENAME TO anchor",
+        "CREATE INDEX idx_behaviour_rule ON behaviour(rule_id)",
+        "CREATE INDEX idx_anchor_rule ON anchor(rule_id)",
+        "CREATE TRIGGER rule_cannot_be_deleted"
+        " BEFORE DELETE ON rule BEGIN"
+        " SELECT RAISE(ABORT,"
+        " 'a rule cannot be removed: supersede it with a new accepted rule proposal');"
+        " END",
+        "CREATE TABLE rule_proposal ("
+        " id INTEGER PRIMARY KEY,"
+        " run_id INTEGER NOT NULL REFERENCES run(id) ON DELETE CASCADE,"
+        " name TEXT NOT NULL,"
+        " statement TEXT NOT NULL,"
+        " revises_rule_id INTEGER REFERENCES rule(id),"
+        " provider TEXT NOT NULL,"
+        " model TEXT,"
+        " created_at TEXT NOT NULL)",
+        "CREATE TABLE rule_proposal_behaviour ("
+        " id INTEGER PRIMARY KEY,"
+        " rule_proposal_id INTEGER NOT NULL"
+        " REFERENCES rule_proposal(id) ON DELETE CASCADE,"
+        " description TEXT NOT NULL)",
+        "CREATE TABLE rule_proposal_anchor ("
+        " id INTEGER PRIMARY KEY,"
+        " rule_proposal_id INTEGER NOT NULL"
+        " REFERENCES rule_proposal(id) ON DELETE CASCADE,"
+        " repository_id INTEGER REFERENCES repository(id),"
+        " path_glob TEXT NOT NULL)",
+        "CREATE TABLE rule_proposal_decision ("
+        " id INTEGER PRIMARY KEY,"
+        " rule_proposal_id INTEGER NOT NULL REFERENCES rule_proposal(id),"
+        " decision TEXT NOT NULL CHECK (decision IN ('accepted', 'rejected')),"
+        " decided_by TEXT NOT NULL,"
+        " decided_at TEXT NOT NULL,"
+        " rationale TEXT)",
+        "CREATE INDEX idx_rule_proposal_run ON rule_proposal(run_id)",
+        "CREATE INDEX idx_rule_proposal_revises ON rule_proposal(revises_rule_id)",
+        "CREATE INDEX idx_rule_proposal_behaviour"
+        " ON rule_proposal_behaviour(rule_proposal_id)",
+        "CREATE INDEX idx_rule_proposal_anchor"
+        " ON rule_proposal_anchor(rule_proposal_id)",
+        "CREATE INDEX idx_rule_proposal_decision"
+        " ON rule_proposal_decision(rule_proposal_id)",
+        "CREATE TRIGGER rule_proposal_is_append_only_update"
+        " BEFORE UPDATE ON rule_proposal BEGIN"
+        " SELECT RAISE(ABORT,"
+        " 'rule_proposal is append-only: a reading cannot be edited'); END",
+        "CREATE TRIGGER rule_proposal_is_append_only_delete"
+        " BEFORE DELETE ON rule_proposal BEGIN"
+        " SELECT RAISE(ABORT,"
+        " 'rule_proposal is append-only: a reading cannot be deleted'); END",
+        "CREATE TRIGGER rule_proposal_decision_is_append_only_update"
+        " BEFORE UPDATE ON rule_proposal_decision BEGIN"
+        " SELECT RAISE(ABORT,"
+        " 'rule_proposal_decision is append-only:"
+        " a recorded decision cannot be modified'); END",
+        "CREATE TRIGGER rule_proposal_decision_is_append_only_delete"
+        " BEFORE DELETE ON rule_proposal_decision BEGIN"
+        " SELECT RAISE(ABORT,"
+        " 'rule_proposal_decision is append-only:"
+        " a recorded decision cannot be deleted'); END",
     ),
 }

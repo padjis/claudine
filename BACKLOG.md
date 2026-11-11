@@ -105,9 +105,9 @@ forces them.
 | CON-42 | Rule generation | An AI pass proposes rules, behaviours and anchors from a ticket's evidence, all as `ai_interpretation`. | 🟡 **in progress** — reply parsing and anchor grounding done (D-046); needs rule proposal storage (CON-51), a submit path (CON-52), and a host (CON-50) |
 | CON-49 | Export the payload through the same gate | The payload can be handed out, and only through the credential gate. | ✅ D-047 — `document --payload` |
 | CON-54 | Run identity | One run per invocation, with its operations attached to it. | ✅ D-049 — schema 4; prerequisite for CON-51 |
-| CON-51 | Rule proposal storage, and an append-only catalogue | A rule proposal survives the run that produced it; a rule can be superseded but never removed. | ⬜ **next** — unblocked by CON-54; shape fixed by D-048 and D-050 |
-| CON-53 | Withdraw the manual rule commands | `rule add` / `behaviour` / `anchor` / `remove` are gone, and a trigger aborts `DELETE ON rule`. | ⬜ D-048 — lands with CON-51 |
-| CON-52 | Submit a reply from outside | A reply produced anywhere becomes grounded, stored proposals via the CLI. | ⬜ needs CON-51; D-045, D-046 |
+| CON-51 | Rule proposal storage | A rule proposal survives the run that produced it and the regeneration of the body. | ✅ D-051 — schema 5; the versioned catalogue lands with CON-44 |
+| CON-53 | Withdraw the manual rule commands | `rule add` / `behaviour` / `anchor` / `remove` are gone, and a trigger aborts `DELETE ON rule`. | ✅ D-048 — landed with CON-51 |
+| CON-52 | Submit a reply from outside | A reply produced anywhere becomes grounded, stored rule proposals via the CLI. | ⬜ **next** — unblocked by CON-51; D-045, D-046 |
 | CON-50 | MCP server | An MCP client can gather evidence, read the payload and submit proposals; approval is never exposed as a tool. | ⬜ D-045 — needs agreement before building (new infrastructure) |
 | CON-45 | Secret scanning before the payload leaves | A payload containing a credential is refused rather than sent. | ✅ D-044 |
 | CON-47 | Document comments | A comment is stored, attributed and anchored to a durable identity; the body stays machine-written. | ⬜ D-043 — needs CON-39's anchor model |
@@ -165,6 +165,27 @@ address, because dropping a diff line would misstate the change.
 payload — roughly 47,000 tokens, for one ticket in one repository. D-039 called the cost real; this
 is the number. CON-42 should treat payload size as a design constraint rather than discover it on a
 bill.
+
+### CON-51 — the reading now outlives the prose that showed it
+
+Done. A rule proposal is stored append-only with its run, its self-reported reader and its claim
+about which rule it revises; a human's answer appends to a separate table so deciding never mutates
+the reading (D-051). CON-53 landed with it: the authoring commands are gone and a trigger aborts
+`DELETE ON rule`.
+
+**The riskiest migration so far.** Dropping `rule.name`'s UNIQUE needs a table rebuild, and `rule`
+is the parent of `behaviour` and `anchor` with `ON DELETE CASCADE` — so dropping the parent alone
+would have silently emptied the catalogue. All three are rebuilt, children dropped first. Verified
+on a real v4 workspace: migrated to 5 with its 8 operations and 1 run intact.
+
+**Mutation-checked:** removing the append-only triggers fails 5 tests; `gather` not persisting what
+the provider returned fails 3; a migration that forgets to copy `behaviour` rows fails 1.
+
+**Half a change, stated as such.** `Catalogue` is still name-keyed — `add_rule` keeps its own
+duplicate guard and `find` looks up by name — so two rules cannot yet share a name through the API
+even though the schema now allows it. The guard is a leftover of the pre-D-050 model and goes when
+the catalogue becomes id-keyed and versioned (CON-43). The test asserts the schema, not the API,
+and says why.
 
 ### CON-54 — one run per invocation, not one per repository
 
