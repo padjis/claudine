@@ -8,6 +8,95 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-046 · 2026-11-11 · A provider reply is parsed, grounded and refused — never silently emptied
+
+**Decision.** `constat/ai/parsing.py` converts a provider reply into `RuleProposal`s under three
+rules:
+
+1. **A reply that cannot be parsed raises `MalformedResponse`** (exit 5), never returns zero
+   proposals. Empty, prose, broken JSON, JSON with no `rules` key, and `rules` that is not a list
+   are all errors.
+2. **Every anchor must match a path actually present in the payload**, and any
+   `repository_alias` must name a repository that was searched. An ungrounded proposal is
+   rejected whole, with a reason.
+3. **Rejections are reported** — in the `ParseResult`, on the `Interpretation`, in the document,
+   and in the CLI summary.
+
+**Context.** Rule 1 is D-041's principle applied one layer in: a parse failure that returns
+nothing makes the document read "no rules were identified", which is a provider failure wearing
+the costume of a finding.
+
+Rule 2 is the one with teeth. A model will propose a rule anchored to a plausible-sounding path
+whether or not that path was in the payload; storing it would mean the tool had **invented its own
+evidence**, which is the exact inverse of product rule 2. Grounding is checkable for free, so it
+is checked.
+
+**Consequences.**
+
+- **A rejected proposal keeps only its name and the reason.** The rest is unvalidated model
+  output, and storing its text would put unattributable prose into a governance record.
+- **One ungrounded anchor rejects the whole proposal**, rather than keeping the grounded half.
+  Silently narrowing a rule the model meant more broadly is a different claim, not a smaller one.
+- **An unanchored proposal is rejected**, because a rule with no anchors can never be matched to a
+  future change (CON-40) — inert rather than merely incomplete.
+- Code fences are unwrapped and bare-string anchors accepted. Pragmatism about how models
+  actually reply; the content inside still has to parse and still has to ground.
+- `name` and `statement` are length-bounded. An unbounded statement lets a model write a page of
+  prose into a field a reviewer reads in a list.
+- **This module is provider-agnostic on purpose.** It takes `(text, payload)` and does not care
+  whether the text came from an HTTP response or from an agent in the same terminal — which is
+  what makes D-045 cheap.
+- Verified on both real subjects (30 and 72 grounding paths): a grounded reply is kept, an
+  invented anchor is rejected, a prose reply is refused.
+
+**Status.** accepted
+
+---
+
+## D-045 · 2026-11-11 · The agent-facing surface is an MCP server, not a skill
+
+**Decision.** Constat's agent-facing surface will be an **MCP server**. A Claude skill is not the
+target. The interpretation pass may therefore be driven by a *host-supplied* model rather than by
+a provider Constat calls itself, and the `Provider` protocol (D-003, CON-41) is not the seam that
+gets used in that mode.
+
+**Context.** Two separate forces, and the second corrected an earlier recommendation of mine.
+
+**Cost.** `CLAUDE.md` postpones the finished product's API calls until the workflow is validated,
+and validation stands at zero discovery conversations (CON-26). If the host supplies the model,
+the subscription is the inference and CON-42's HTTP client may never need to exist.
+
+**Portability.** A skill is an *instruction-packaging format*, portable only to runtimes that
+implement it — several surfaces, one vendor. **MCP is a protocol**, and is the mechanism that
+actually crosses implementations. "Works across AI implementations" is an MCP question; a skill
+was the wrong answer to it.
+
+**Consequences.**
+
+- **The prerequisite work is identical either way**, so the surface choice costs nothing to defer:
+  a submit command that runs D-046's parser, a payload-export command, and provenance handling.
+  The server is a thin shell over those.
+- **A hole this opens, and a prerequisite.** Redaction (D-040) and credential refusal (D-044)
+  currently gate on `provider.name != NULL_PROVIDER_NAME`. An export or submit front door would
+  bypass both — the same gate must apply there, or D-040 and D-044 are decorative.
+- **Provenance degrades, and must be recorded as degraded.** With a host-supplied model, the
+  model's identity is *self-reported* by the client. That is nearer `assumption` than
+  `observed_fact` and must never be stored as the latter.
+- **Control inverts.** Constat stops orchestrating and becomes a service: it cannot guarantee an
+  interpretation pass happened, only validate what it is handed. Acceptable, because it never
+  trusted that output — grounding is checked (D-046) and acceptance is still human (D-036).
+- **Approval is never exposed as a tool.** A model that can call `approve` would make the
+  no-automatic-approvals prohibition unenforceable. Acceptance stays a human act outside the
+  agent's reach.
+- MCP over stdio is a local process, so this is not the hosted service `PRODUCT_SPEC.md` § 6.2
+  defers — but it is new infrastructure, and the ticket needs agreeing before it is built.
+- The portability *floor* remains the CLI: any agent can be told to run a command. A skill would
+  only ever have been a convenience wrapper.
+
+**Status.** accepted
+
+---
+
 ## D-044 · 2026-11-11 · Credentials are detected by format; a refusal is overridable on the record
 
 **Completes D-040**, which stopped identity crossing the provider boundary and stated plainly that
