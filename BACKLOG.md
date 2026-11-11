@@ -107,7 +107,7 @@ forces them.
 | CON-54 | Run identity | One run per invocation, with its operations attached to it. | ✅ D-049 — schema 4; prerequisite for CON-51 |
 | CON-51 | Rule proposal storage | A rule proposal survives the run that produced it and the regeneration of the body. | ✅ D-051 — schema 5; the versioned catalogue lands with CON-44 |
 | CON-53 | Withdraw the manual rule commands | `rule add` / `behaviour` / `anchor` / `remove` are gone, and a trigger aborts `DELETE ON rule`. | ✅ D-048 — landed with CON-51 |
-| CON-52 | Submit a reply from outside | A reply produced anywhere becomes grounded, stored rule proposals via the CLI. | ⬜ **next** — unblocked by CON-51; D-045, D-046 |
+| CON-52 | Submit a reply from outside | A reply produced anywhere becomes grounded, stored rule proposals via the CLI. | ✅ D-052 — `rule submit`, `rule proposals` |
 | CON-50 | MCP server | An MCP client can gather evidence, read the payload and submit proposals; approval is never exposed as a tool. | ⬜ D-045 — needs agreement before building (new infrastructure) |
 | CON-45 | Secret scanning before the payload leaves | A payload containing a credential is refused rather than sent. | ✅ D-044 |
 | CON-47 | Document comments | A comment is stored, attributed and anchored to a durable identity; the body stays machine-written. | ⬜ D-043 — needs CON-39's anchor model |
@@ -165,6 +165,27 @@ address, because dropping a diff line would misstate the change.
 payload — roughly 47,000 tokens, for one ticket in one repository. D-039 called the cost real; this
 is the number. CON-42 should treat payload size as a design constraint rather than discover it on a
 bill.
+
+### CON-52 — the inbound half, and a false rejection caught by a test
+
+Done. `rule submit` parses a reply, grounds every anchor against **re-gathered** evidence, stores
+what survives and reports what it discarded; `rule proposals` shows the queue (D-052).
+
+Re-gathering is the load-bearing part. If the payload came from the caller, a reply could ship a
+payload that makes any anchor look grounded — the check would be verifying the reply against
+itself.
+
+**A false rejection, found by a test rather than in use.** `**/rules.py` is the most natural way to
+write "this file anywhere", and plain `fnmatch` never matches it against a root-level file, so a
+correct anchor was being discarded as ungrounded. Grounding and catalogue matching now share
+`constat/globs.py` — two matchers that disagreed would accept a rule proposal at submit time and
+then never match it to a change.
+
+**Mutation-checked:** trusting a caller-supplied payload fails 13 tests; auto-accepting into the
+catalogue fails 2; letting the two matchers diverge again fails 4.
+
+**Verified end to end on Subject B:** a 195 KB payload exported, a reply submitted, the grounded
+reading stored and the invented anchor discarded, with the catalogue still empty.
 
 ### CON-51 — the reading now outlives the prose that showed it
 

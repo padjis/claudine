@@ -12,8 +12,8 @@ code. What it now does is for a reviewer to state.
 from __future__ import annotations
 
 from datetime import datetime
-from fnmatch import fnmatch
 
+from ..globs import matches_path
 from ..errors import AlreadyRegistered, NotRegistered
 from ..models import Anchor, Behaviour, Rule
 from .workspace import Workspace, utc_now
@@ -121,7 +121,7 @@ class Catalogue:
                 for path in paths
                 for anchor in rule.anchors
                 if anchor.repository_alias in (None, repository_alias)
-                and fnmatch(path, anchor.path_glob)
+                and matches_path(path, anchor.path_glob)
             ]
             if matched:
                 hits[rule.name] = sorted(dict.fromkeys(matched))

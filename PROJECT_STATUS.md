@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-11
 **Current phase:** Phase 3 — Meaning and reporting (reshaped by D-035 … D-039)
-**Current session:** CON-52 — submit a reply (CON-51, CON-53, CON-54 closed)
+**Current session:** CON-44 — per-rule review decisions (CON-52 closed)
 
 ---
 
@@ -324,19 +324,82 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-**CON-52 — submit a reply from outside.** Unblocked: there is now somewhere to put a rule proposal.
+**CON-44 — per-rule review decisions**, or **CON-50** (the MCP server).
 
-It runs D-046's parser unchanged and stores the result through `RuleProposals.record`. The gate is
-already shared (D-047), so the submit path inherits it rather than needing its own.
+The loop now runs end to end *except* for accepting anything:
 
-Then **CON-50** (the MCP server), which needs agreeing first — `CLAUDE.md` requires agreement for
-new infrastructure.
+```
+constat document 622 --payload        # evidence out, through the gate
+<any model, anywhere>                 # produces a reply
+constat rule submit 622 --from -      # grounded, stored, discards reported
+constat rule proposals 622            # the review queue
+```
 
-**Deferred deliberately:** acceptance does not yet write into the catalogue. That needs the
-versioned rule table, which merges with CON-43 and lands with the acceptance flow (CON-44). The
-`Catalogue` API is still name-keyed and goes id-keyed at the same time.
+What is missing is the last step. `RuleProposals.decide` exists and is tested, but there is no
+command for it, and **accepting does not write into the catalogue** — that needs the versioned rule
+table, which merges with CON-43. So CON-44 is really: a decide command, the versioned catalogue,
+and the id-keyed `Catalogue` API together.
+
+**CON-50** (the MCP server) wraps the two commands above and needs agreeing first, since
+`CLAUDE.md` requires agreement for new infrastructure.
+
+Also open: the document body still reflects the run that wrote it, so a submitted reading is stored
+but not rendered there. Rendering from stored readings belongs with the display work (CON-09).
 
 Still standing: validation is at **zero discovery conversations** (CON-26).
+
+---
+
+## CON-52 — done when: *a reply produced anywhere becomes grounded, stored rule proposals* ✅
+
+| Item | Status |
+| --- | --- |
+| `submit_reply`, `rule submit`, `rule proposals` | ✅ D-052 |
+| Evidence **re-gathered**, never taken from the caller | ✅ the load-bearing part |
+| An unusable reply is an error, not an empty result | ✅ exit 5 |
+| Parsing happens before the run opens — no empty events | ✅ |
+| `provider` / `model` recorded as self-reported | ✅ D-045 |
+| Discards reported **before** the kept count | ✅ D-046 |
+| Nothing accepted; the catalogue is untouched | ✅ asserted |
+| The document body is not rewritten | ✅ `document` writes it, submit does not |
+
+### Tests run
+
+```
+.venv/bin/python -m pytest  →  625 passed in 57.13s
+```
+
+31 new tests. The existing 594 needed no changes.
+
+### Mutation-checked
+
+| Regression | Result |
+| --- | --- |
+| Trust a caller-supplied payload instead of re-gathering | **13 tests failed** |
+| Auto-accept submitted readings into the catalogue | **2 tests failed** |
+| Let the two glob matchers diverge again | **4 tests failed** |
+
+### Why re-gathering is the load-bearing part
+
+If the payload came from the caller, a reply could ship a payload that makes any anchor look
+grounded — the check would be verifying the reply against itself. Grounding only means something
+when it is checked against evidence Constat can see.
+
+### A false rejection, caught by a test rather than in use
+
+`**/rules.py` is the most natural way to write "this file anywhere", and plain `fnmatch` never
+matches it against a root-level file — so a correct anchor was being discarded as ungrounded.
+Grounding and catalogue matching now share `constat/globs.py`; two matchers that disagreed would
+accept a rule proposal at submit time and then never match it to a change.
+
+This is the same failure as a false credential positive, one layer up: a rejection that is wrong
+teaches people to stop reading rejections.
+
+### Verified end to end on a real subject
+
+Subject B: a 195 KB payload exported, a reply submitted naming one real path and one invented one.
+The grounded reading was stored, the invented anchor discarded with its reason, and the catalogue
+was still empty afterwards.
 
 ---
 

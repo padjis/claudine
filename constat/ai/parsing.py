@@ -29,9 +29,9 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from fnmatch import fnmatch
 
 from ..errors import MalformedResponse
+from ..globs import matches_path
 from ..models import Anchor, Behaviour, RuleProposal
 from .redaction import ProviderPayload
 
@@ -167,7 +167,7 @@ def _anchors(raw: object, paths: set[str], aliases: set[str]) -> tuple[Anchor, .
             if not isinstance(alias, str) or alias not in aliases:
                 return ()
 
-        if not any(fnmatch(path, glob) for path in paths):
+        if not any(matches_path(path, glob) for path in paths):
             return ()
 
         anchors.append(Anchor(path_glob=glob, repository_alias=alias))

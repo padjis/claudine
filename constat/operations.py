@@ -24,9 +24,11 @@ from .ai import (
     Interpretation,
     Provider,
     ProviderPayload,
+    Rejection,
     SecretFinding,
     describe_scan,
     guard_release,
+    parse,
     redact,
     scan,
 )
@@ -421,6 +423,67 @@ def export_payload(
         accepted=accepted,
         run_id=run_id,
     )
+
+
+@dataclass(frozen=True)
+class SubmitResult:
+    """What a submitted reply produced."""
+
+    run_id: int
+    stored: tuple[int, ...] = ()
+    rejections: tuple[Rejection, ...] = ()
+
+    @property
+    def stored_count(self) -> int:
+        return len(self.stored)
+
+
+def submit_reply(
+    workspace: Workspace,
+    reference: str,
+    text: str,
+    provider: str = "external",
+    model: str | None = None,
+    limits: ExcerptLimits = DEFAULT_LIMITS,
+) -> SubmitResult:
+    """Turn a reply produced outside Constat into stored rule proposals.
+
+    The inbound half of D-045: `export_payload` hands the evidence out, this
+    takes the reading back. Everything after the reply is the same as the
+    provider path — the same `parse`, the same anchor grounding, the same
+    append-only storage — because `parse` takes `(text, payload)` and does not
+    care where the text came from (D-046).
+
+    **The evidence is re-gathered rather than trusted.** Grounding has to be
+    checked against what Constat can see now, not against whatever the caller
+    claims it read; a caller who could supply the payload could also supply a
+    payload that makes any anchor look grounded.
+
+    **No credential gate here.** The payload is rebuilt locally to check
+    grounding and is never transmitted, so there is nothing to refuse. The gate
+    belongs on egress (D-047), and applying it to an inbound path would refuse
+    a reply about evidence the user already, knowingly, exported.
+
+    **Nothing is accepted.** Everything stored is pending a human decision
+    (D-036, D-037); this fills the review queue and never writes to the
+    catalogue.
+    """
+    findings = collect(workspace, reference, limits)
+    payload = redact(reference, findings)
+
+    # Raises MalformedResponse for an unusable reply, rather than storing
+    # nothing and letting that read as "no rules were identified" (D-046).
+    result = parse(text, payload)
+
+    run_id = open_run(workspace, reference, "submit_reply")
+    proposals = RuleProposals(workspace)
+    stored = tuple(
+        proposals.record(
+            run_id=run_id, proposal=proposal, provider=provider, model=model
+        )
+        for proposal in result.proposals
+    )
+    return SubmitResult(run_id=run_id, stored=stored, rejections=result.rejections)
 
 
 def _document_id(workspace: Workspace, reference: str) -> int:

@@ -10,15 +10,23 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from . import __version__
 from .config import build_request, build_snapshot_request
 from .errors import InvalidInput, ProviderError, RepositoryError, WorkspaceError
 from .evidence import collect_evidence, describe_commit
 from .mapping import change_proposal, commit_record, state_proposal
-from .store import Catalogue, Registry, TicketStore, Workspace, database_path
+from .store import (
+    Catalogue,
+    Registry,
+    RuleProposals,
+    TicketStore,
+    Workspace,
+    database_path,
+)
 from .ai import as_dict as payload_as_dict
-from .operations import export_payload, gather
+from .operations import export_payload, gather, submit_reply
 from .tickets import TicketStatus, find_ticket_commits
 from .git import (
     compare_revisions,
@@ -93,6 +101,47 @@ def build_parser() -> argparse.ArgumentParser:
 
     rule_show = rule_actions.add_parser("show", help="show one rule")
     rule_show.add_argument("name", metavar="NAME")
+
+    rule_submit = rule_actions.add_parser(
+        "submit",
+        help="turn a reply produced outside Constat into rule proposals",
+        description=(
+            "Parse a reply, check every anchor against the ticket's evidence, "
+            "and store what survives as rule proposals awaiting a human "
+            "decision. Nothing is accepted here: this fills the review queue "
+            "and never writes to the catalogue."
+        ),
+    )
+    rule_submit.add_argument("reference", metavar="REF")
+    rule_submit.add_argument(
+        "--from",
+        dest="source",
+        metavar="PATH",
+        default="-",
+        help="file to read the reply from (default: - for stdin)",
+    )
+    rule_submit.add_argument(
+        "--provider",
+        default="external",
+        help=(
+            "what produced the reply. Self-reported and unverified (D-045): "
+            "recorded so a reviewer knows what to weigh, never as an observed "
+            "fact."
+        ),
+    )
+    rule_submit.add_argument(
+        "--model", default=None, help="model name, also self-reported"
+    )
+
+    rule_proposals = rule_actions.add_parser(
+        "proposals", help="list the rule proposals awaiting a decision"
+    )
+    rule_proposals.add_argument("reference", metavar="REF")
+    rule_proposals.add_argument(
+        "--all",
+        action="store_true",
+        help="include rule proposals already decided",
+    )
 
     document = subparsers.add_parser(
         "document",
@@ -278,6 +327,51 @@ def _run_init(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _report_submission(result) -> int:
+    """Report a submission: what was stored, and what was discarded.
+
+    Discards are printed first. A reader shown only the kept count has been
+    told a shorter truth than the one that happened (D-046).
+    """
+    if result.rejections:
+        print(f"{len(result.rejections)} discarded as ungrounded or malformed:")
+        for rejection in result.rejections:
+            print(f"    {rejection.describe()}")
+
+    print(f"{result.stored_count} rule proposal(s) stored, run {result.run_id}")
+    if result.stored_count:
+        print()
+        print("None of them is accepted. They await a human decision —")
+        print("see them with `constat rule proposals <REF>`.")
+    return EXIT_OK
+
+
+def _report_proposals(proposals, reference: str, include_decided: bool) -> int:
+    stored = (
+        proposals.for_ticket(reference)
+        if include_decided
+        else proposals.undecided(reference)
+    )
+    if not stored:
+        scope = "rule proposals" if include_decided else "undecided rule proposals"
+        print(f"No {scope} for {reference}.")
+        print()
+        print("That is not a statement that this ticket has no rules —")
+        print("nothing has read its evidence yet.")
+        return EXIT_OK
+
+    print(f"{len(stored)} rule proposal(s) for {reference}:")
+    for item in stored:
+        state = item.decision or "awaiting a decision"
+        reader = item.provider + (f" ({item.model})" if item.model else "")
+        print(f"  [{item.id}] {item.proposal.name} — {state}")
+        print(f"      {item.proposal.statement}")
+        print(f"      read by {reader} (self-reported), run {item.run_id}")
+        if item.claims_to_revise:
+            print(f"      claims to revise rule {item.revises_rule_id}")
+    return EXIT_OK
+
+
 def _print_rule(rule) -> None:
     print(f"{rule.name}")
     print(f"  statement:  {rule.statement}")
@@ -322,6 +416,26 @@ def _run_rule(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
                     print(f"  {rule.name}: {rule.statement}{unanchored}")
                 return EXIT_OK
 
+            if args.rule_action == "submit":
+                text = (
+                    sys.stdin.read()
+                    if args.source == "-"
+                    else Path(args.source).read_text()
+                )
+                result = submit_reply(
+                    workspace,
+                    args.reference,
+                    text,
+                    provider=args.provider,
+                    model=args.model,
+                )
+                return _report_submission(result)
+
+            if args.rule_action == "proposals":
+                return _report_proposals(
+                    RuleProposals(workspace), args.reference, args.all
+                )
+
             if args.rule_action == "show":
                 rule = catalogue.find(args.name)
                 if rule is None:
@@ -330,6 +444,14 @@ def _run_rule(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
                 _print_rule(rule)
                 return EXIT_OK
 
+    except ProviderError as exc:
+        # A reply that cannot be parsed is a provider fault, not a workspace
+        # one, and must never read as "no rules were identified" (D-046).
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_PROVIDER
+    except RepositoryError as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_REPOSITORY
     except WorkspaceError as exc:
         print(f"{PROG}: error: {exc}", file=sys.stderr)
         return EXIT_WORKSPACE

@@ -8,6 +8,45 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-052 · 2026-11-11 · A submitted reply is grounded against re-gathered evidence
+
+**Decision.** `constat rule submit <REF>` takes a reply produced outside Constat and stores the
+rule proposals that survive grounding. Three rules shape it:
+
+1. **The evidence is re-gathered, never taken from the caller.** Grounding is checked against what
+   Constat can see now.
+2. **No credential gate.** The payload is rebuilt locally and never transmitted, so there is
+   nothing to refuse. The gate belongs on egress (D-047).
+3. **Nothing is accepted.** Submitting fills the review queue; the catalogue is untouched.
+
+**Context.** D-045 made the host supply the model, so Constat needs an inbound path. `parse` takes
+`(text, payload)` and does not care where the text came from (D-046), so everything after the reply
+is the provider path's machinery unchanged.
+
+**Consequences.**
+
+- **A caller cannot widen its own grounding set.** If the payload came from the caller, a reply
+  could ship a payload that makes any anchor look grounded — the check would verify the reply
+  against itself.
+- **Parsing happens before the run is opened**, so an unusable reply leaves no empty event behind.
+- `provider` and `model` are self-reported and recorded as such (D-045). Nothing verifies them.
+- **Discards are printed before the kept count.** A reader shown only what was stored has been told
+  a shorter truth than what happened (D-046).
+- **One matcher, shared.** Grounding and catalogue matching now both use `constat/globs.py`. Two
+  matchers that disagreed would accept a rule proposal at submit time and then never match it to a
+  change, or the reverse.
+- **`**/x.py` also matches at the root.** Plain `fnmatch` requires a directory after `**/`, so a
+  model writing the most natural "this file anywhere" glob would have been rejected as ungrounded.
+  A false rejection here is the same failure as a false credential positive: it teaches people to
+  stop reading the rejections.
+- The document body still reflects the run that wrote it, so a submitted reading is stored but not
+  rendered there. `rule proposals <REF>` shows the queue; rendering from stored readings belongs
+  with the display work.
+
+**Status.** accepted
+
+---
+
 ## D-051 · 2026-11-11 · A rule proposal is stored append-only; its decision is a separate record
 
 **Implements D-048 and D-050.** Schema 5.
