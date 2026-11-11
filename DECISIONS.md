@@ -8,6 +8,56 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-048 · 2026-11-11 · Rules are only AI-generated, and the catalogue is append-only
+
+**Supersedes D-039's manual-command carve-out**, which kept `rule add` / `behaviour` / `anchor` as
+a bootstrap and test path.
+
+**Decision.** Two halves of one simplification:
+
+1. **A rule enters the catalogue only as an accepted rule proposal.** There is no human-authored
+   path. The `rule add`, `rule behaviour` and `rule anchor` commands go.
+2. **A rule cannot be removed.** `rule remove` goes, `Catalogue.remove_rule` goes, and a
+   `BEFORE DELETE ON rule` trigger aborts the operation — enforced by the database, not by the
+   absence of a command.
+
+`rule list` and `rule show` stay; they are read-only. `Catalogue.add_rule` and friends stay as the
+*storage* API the interpretation path writes accepted rule proposals through — what is removed is
+the human-facing surface, not the ability to store.
+
+**Context.** D-039 already made AI the author and kept the manual commands only as scaffolding.
+Keeping them meant two authorship paths, two provenance stories, and a question — "who wrote this
+rule?" — that the taxonomy had to answer twice. Removing them deletes the question.
+
+Removal went for a different reason. The project's own pattern is that integrity lives where it
+cannot be bypassed: `document_version` aborts `UPDATE` and `DELETE` by trigger precisely so a
+future bug cannot rewrite an approval by forgetting to call the right helper (CON-31). A catalogue
+that can be emptied by a `DELETE` is protected by convention only.
+
+**Consequences.**
+
+- **Supersession replaces removal, and this is the load-bearing consequence.** CON-43 already
+  requires that evidence contradicting a baselined rule *propose an update rather than a
+  duplicate*. With no deletes, that update is a **new version**, not a mutation. A wrongly
+  accepted rule is therefore permanent as *history* and replaceable as *current* — which is
+  product rule 5 working as intended rather than a trap.
+- **The rule catalogue needs the versioned shape `document_version` already has.** That makes
+  CON-43 and CON-51 the same schema change: append-only versioned rules, written only by accepted
+  rule proposals. Schema v4, with a migration.
+- **A bootstrap gap, stated rather than discovered.** With the provider registry still empty
+  (CON-41), nothing can put a rule in the catalogue, so `unmatched_paths` coverage is unreachable
+  from the CLI until the interpretation path completes. Tests exercise it through the storage API
+  directly. This is a real loss of a manual smoke path, accepted deliberately.
+- 8 CLI tests covering the removed commands go with them; the 24 catalogue tests call the storage
+  API and are unaffected.
+- **"Rule proposal", never bare "proposal."** A rule proposal is a rule in a pre-acceptance state,
+  not a separate kind of object — and after this decision it is the *only* way a rule comes into
+  being, which makes the naming load-bearing rather than stylistic.
+
+**Status.** accepted
+
+---
+
 ## D-047 · 2026-11-11 · Every path where the payload leaves goes through one gate
 
 **Decision.** `guard_release(payload, accepted=…)` is the single chokepoint for any path where the
@@ -398,6 +448,10 @@ product exists to treat. Having Constat suffer from it would be self-defeating.
   changed files claimed by no rule must stay prominent.
 - Manual `rule` commands are kept as a bootstrap and test path, not as the model. They are how the
   catalogue is exercised without a provider configured.
+
+  > **Withdrawn by D-048** on 2026-11-11. There is no human-authored path into the catalogue, and
+  > no removal either. Two authorship paths meant answering "who wrote this rule?" twice; the
+  > bootstrap convenience was not worth it.
 
 **Status.** accepted
 
