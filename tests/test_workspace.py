@@ -449,12 +449,23 @@ class TestMigration:
         assert {"rule", "behaviour", "anchor"} <= tables
 
     def test_migration_runs_every_step_in_order(self, home: Path):
-        """A v1 workspace must cross both steps, not just the first."""
+        """A v1 workspace must cross every step, not just the first.
+
+        Asserted against `SCHEMA_VERSION` rather than a literal so a later
+        bump that forgets its migration fails here instead of quietly
+        rewriting the expectation.
+        """
         self._make_v1(home)
         with Workspace.open(home) as ws:
-            assert ws.schema_version == 3
+            assert ws.schema_version == SCHEMA_VERSION
             columns = {r["name"] for r in ws.execute("PRAGMA table_info(ticket)")}
-        assert "title" not in columns
+            tables = {
+                r["name"]
+                for r in ws.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            }
+        assert "title" not in columns  # step 1 -> 2
+        assert "rule" in tables  # step 2 -> 3
+        assert "run" in tables  # step 3 -> 4
 
     def test_migration_is_persisted_not_repeated(self, home: Path):
         self._make_v1(home)

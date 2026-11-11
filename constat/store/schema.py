@@ -11,7 +11,7 @@ silently; a trigger cannot be bypassed by forgetting to call the right helper.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA = """
 CREATE TABLE schema_meta (
@@ -71,12 +71,28 @@ CREATE TABLE document_version (
     UNIQUE (document_id, version_no)
 );
 
+-- One invocation that touched a document. A gather writes one `operation` row
+-- per repository, so an operation row cannot answer "which run produced this";
+-- a rule proposal is a reading of the evidence one run gathered (D-046,
+-- D-048), and it needs something to point at. This is that something.
+CREATE TABLE run (
+    id          INTEGER PRIMARY KEY,
+    document_id INTEGER NOT NULL REFERENCES document(id) ON DELETE CASCADE,
+    kind        TEXT    NOT NULL,
+    started_at  TEXT    NOT NULL
+);
+
 -- What ran, against which repository, and what it contributed. Without this a
 -- document becomes unattributable prose, which is the failure this product
 -- exists to prevent (D-029).
+--
+-- `run_id` is nullable only because rows written before schema 4 have no run
+-- to belong to. Inventing one for them would be fabricating provenance, so
+-- they keep NULL and say so.
 CREATE TABLE operation (
     id            INTEGER PRIMARY KEY,
     document_id   INTEGER NOT NULL REFERENCES document(id) ON DELETE CASCADE,
+    run_id        INTEGER REFERENCES run(id) ON DELETE CASCADE,
     repository_id INTEGER REFERENCES repository(id),
     kind          TEXT    NOT NULL,
     ran_at        TEXT    NOT NULL,
@@ -119,6 +135,8 @@ CREATE INDEX idx_behaviour_rule ON behaviour(rule_id);
 CREATE INDEX idx_anchor_rule ON anchor(rule_id);
 CREATE INDEX idx_document_version_document ON document_version(document_id);
 CREATE INDEX idx_operation_document ON operation(document_id);
+CREATE INDEX idx_operation_run ON operation(run_id);
+CREATE INDEX idx_run_document ON run(document_id);
 
 -- History is durable (product rule 5), enforced here rather than trusted to
 -- callers. A later approval must create a new row; it must never rewrite or
@@ -171,5 +189,18 @@ MIGRATIONS: dict[int, tuple[str, ...]] = {
         " UNIQUE (rule_id, repository_id, path_glob))",
         "CREATE INDEX idx_behaviour_rule ON behaviour(rule_id)",
         "CREATE INDEX idx_anchor_rule ON anchor(rule_id)",
+    ),
+    # 3 -> 4: a run has an identity, and operations belong to one (D-046).
+    # Existing operation rows keep run_id NULL: they were written before runs
+    # existed, and back-filling a run for them would fabricate provenance.
+    3: (
+        "CREATE TABLE run ("
+        " id INTEGER PRIMARY KEY,"
+        " document_id INTEGER NOT NULL REFERENCES document(id) ON DELETE CASCADE,"
+        " kind TEXT NOT NULL,"
+        " started_at TEXT NOT NULL)",
+        "ALTER TABLE operation ADD COLUMN run_id INTEGER REFERENCES run(id)",
+        "CREATE INDEX idx_operation_run ON operation(run_id)",
+        "CREATE INDEX idx_run_document ON run(document_id)",
     ),
 }

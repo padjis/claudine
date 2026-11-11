@@ -76,6 +76,10 @@ class OperationResult:
     interpretation: Interpretation | None = None
     scan_findings: tuple[SecretFinding, ...] = ()
     scan_accepted: bool = False
+    run_id: int | None = None
+    """The run this result belongs to. A rule proposal reads the evidence one
+    run gathered (D-046), so the caller needs the identity, not just the
+    body."""
 
     @property
     def repositories_searched(self) -> int:
@@ -371,6 +375,9 @@ class ExportResult:
     payload: ProviderPayload
     scan_findings: tuple[SecretFinding, ...] = ()
     accepted: bool = False
+    run_id: int | None = None
+    """Set only when a run was recorded — an export that found nothing to
+    accept made no decision, and so is not an event."""
 
 
 def export_payload(
@@ -398,12 +405,46 @@ def export_payload(
     scan_findings = guard_release(payload, accepted=accept_scan_findings)
 
     accepted = bool(scan_findings)
+    run_id = None
     if accepted:
-        _record_scan_override(workspace, reference, scan_findings, kind="scan_override_export")
+        # Only recorded when there is something to record. An export that
+        # found nothing made no decision, so inventing a run for it would put
+        # an empty event in the audit trail.
+        run_id = open_run(workspace, reference, "export_payload")
+        _record_scan_override(
+            workspace, reference, scan_findings, "scan_override_export", run_id
+        )
 
     return ExportResult(
-        payload=payload, scan_findings=scan_findings, accepted=accepted
+        payload=payload,
+        scan_findings=scan_findings,
+        accepted=accepted,
+        run_id=run_id,
     )
+
+
+def _document_id(workspace: Workspace, reference: str) -> int:
+    return workspace.execute(
+        "SELECT d.id FROM document d JOIN ticket t ON t.id = d.ticket_id "
+        "WHERE t.reference = ?",
+        (reference,),
+    ).fetchone()["id"]
+
+
+def open_run(workspace: Workspace, reference: str, kind: str) -> int:
+    """Record that a run happened, and return its identity.
+
+    A gather writes one `operation` row per repository, so no operation row
+    answers "which run produced this". A rule proposal is a reading of the
+    evidence one run gathered (D-046), so it needs a single thing to point at.
+    """
+    document_id = _document_id(workspace, reference)
+    with workspace.transaction() as ws:
+        cursor = ws.execute(
+            "INSERT INTO run (document_id, kind, started_at) VALUES (?, ?, ?)",
+            (document_id, kind, utc_now()),
+        )
+        return int(cursor.lastrowid)
 
 
 def _record_scan_override(
@@ -411,6 +452,7 @@ def _record_scan_override(
     reference: str,
     scan_findings: tuple[SecretFinding, ...],
     kind: str,
+    run_id: int,
 ) -> None:
     """Record that a human let credential findings through.
 
@@ -418,19 +460,15 @@ def _record_scan_override(
     payload as a whole. Locations are kept so the override stays auditable; the
     matched text never is.
     """
-    document_id = workspace.execute(
-        "SELECT d.id FROM document d JOIN ticket t ON t.id = d.ticket_id "
-        "WHERE t.reference = ?",
-        (reference,),
-    ).fetchone()["id"]
-
     with workspace.transaction() as ws:
         ws.execute(
             "INSERT INTO operation "
-            "(document_id, repository_id, kind, ran_at, summary, payload) "
-            f"VALUES (?, NULL, '{kind}', ?, ?, ?)",
+            "(document_id, run_id, repository_id, kind, ran_at, summary, payload) "
+            "VALUES (?, ?, NULL, ?, ?, ?, ?)",
             (
-                document_id,
+                _document_id(workspace, reference),
+                run_id,
+                kind,
                 utc_now(),
                 f"accepted {len(scan_findings)} credential-scan finding(s)",
                 "\n".join(f.describe() for f in scan_findings),
@@ -497,11 +535,8 @@ def gather(
 
     body = render(reference, findings, interpretation, scan_section)
 
-    document_id = workspace.execute(
-        "SELECT d.id FROM document d JOIN ticket t ON t.id = d.ticket_id "
-        "WHERE t.reference = ?",
-        (reference,),
-    ).fetchone()["id"]
+    document_id = _document_id(workspace, reference)
+    run_id = open_run(workspace, reference, "gather_evidence")
 
     with workspace.transaction() as ws:
         ws.execute(
@@ -514,10 +549,11 @@ def gather(
             # so the override stays auditable; the matched text never is.
             ws.execute(
                 "INSERT INTO operation "
-                "(document_id, repository_id, kind, ran_at, summary, payload) "
-                "VALUES (?, NULL, 'scan_override', ?, ?, ?)",
+                "(document_id, run_id, repository_id, kind, ran_at, summary, payload) "
+                "VALUES (?, ?, NULL, 'scan_override', ?, ?, ?)",
                 (
                     document_id,
+                    run_id,
                     now,
                     f"accepted {len(scan_findings)} credential-scan finding(s)",
                     "\n".join(f.describe() for f in scan_findings),
@@ -530,10 +566,11 @@ def gather(
             ).fetchone()["id"]
             ws.execute(
                 "INSERT INTO operation "
-                "(document_id, repository_id, kind, ran_at, summary) "
-                "VALUES (?, ?, 'gather_evidence', ?, ?)",
+                "(document_id, run_id, repository_id, kind, ran_at, summary) "
+                "VALUES (?, ?, ?, 'gather_evidence', ?, ?)",
                 (
                     document_id,
+                    run_id,
                     repository_id,
                     now,
                     f"{finding.status.value}: {len(finding.commits)} commit(s)",
@@ -547,4 +584,5 @@ def gather(
         interpretation=interpretation,
         scan_findings=scan_findings,
         scan_accepted=accepted,
+        run_id=run_id,
     )

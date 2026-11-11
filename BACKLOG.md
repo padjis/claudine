@@ -102,10 +102,11 @@ forces them.
 | CON-39 | Regeneration must not destroy human input | Re-running an operation preserves every comment and decision, each still attached to what it was about. | ⬜ **blocks CON-12** — reframed by D-043: human *edits* no longer exist, so this is now about durable comment anchors |
 | CON-40 | Rule catalogue storage | Rules, behaviours and anchors persist and report coverage. | ✅ |
 | CON-41 | AI provider interface | A provider can be configured; absent one, Constat reports evidence and states that no rules were identified. | ✅ D-040, D-041 |
-| CON-42 | Rule generation | An AI pass proposes rules, behaviours and anchors from a ticket's evidence, all as `ai_interpretation`. | 🟡 **in progress** — reply parsing and anchor grounding done (D-046); needs a submit path (CON-49) and either a provider or a host (CON-50) |
+| CON-42 | Rule generation | An AI pass proposes rules, behaviours and anchors from a ticket's evidence, all as `ai_interpretation`. | 🟡 **in progress** — reply parsing and anchor grounding done (D-046); needs rule proposal storage (CON-51), a submit path (CON-52), and a host (CON-50) |
 | CON-49 | Export the payload through the same gate | The payload can be handed out, and only through the credential gate. | ✅ D-047 — `document --payload` |
-| CON-51 | Rule proposal storage, and an append-only catalogue | A rule proposal survives the run that produced it; a rule can be superseded but never removed. | ⬜ **next, and a schema change** — merges with CON-43 per D-048; blocks CON-52 |
-| CON-53 | Withdraw the manual rule commands | `rule add` / `behaviour` / `anchor` / `remove` are gone, and a trigger aborts `DELETE ON rule`. | ⬜ D-048 — lands with CON-51's v4 migration |
+| CON-54 | Run identity | One run per invocation, with its operations attached to it. | ✅ D-049 — schema 4; prerequisite for CON-51 |
+| CON-51 | Rule proposal storage, and an append-only catalogue | A rule proposal survives the run that produced it; a rule can be superseded but never removed. | ⬜ **next** — unblocked by CON-54; merges with CON-43 per D-048 |
+| CON-53 | Withdraw the manual rule commands | `rule add` / `behaviour` / `anchor` / `remove` are gone, and a trigger aborts `DELETE ON rule`. | ⬜ D-048 — lands with CON-51 |
 | CON-52 | Submit a reply from outside | A reply produced anywhere becomes grounded, stored proposals via the CLI. | ⬜ needs CON-51; D-045, D-046 |
 | CON-50 | MCP server | An MCP client can gather evidence, read the payload and submit proposals; approval is never exposed as a tool. | ⬜ D-045 — needs agreement before building (new infrastructure) |
 | CON-45 | Secret scanning before the payload leaves | A payload containing a credential is refused rather than sent. | ✅ D-044 |
@@ -164,6 +165,24 @@ address, because dropping a diff line would misstate the change.
 payload — roughly 47,000 tokens, for one ticket in one repository. D-039 called the cost real; this
 is the number. CON-42 should treat payload size as a design constraint rather than discover it on a
 bill.
+
+### CON-54 — one run per invocation, not one per repository
+
+Done. A gather writes one `operation` row per repository, so no operation row could answer "which
+run produced this" — and a rule proposal is a reading of the evidence one run gathered (D-046), so
+it needed something to point at. Schema 4 adds `run` and `operation.run_id` (D-049).
+
+**Pre-migration rows keep `run_id` NULL.** Back-filling would fabricate provenance. Verified on a
+real workspace built by the previous commit: it migrated to v4, kept its 7 pre-run operation rows
+NULL, and a fresh gather opened run 1 with its operation attached.
+
+**Mutation-checked:** opening a run per repository instead of per invocation fails 5 tests; a
+migration that creates the table but forgets the column fails 4.
+
+**A fixture of mine tripped a real guard.** Registering three repositories failed as a duplicate,
+because `make_subject` seeds byte-identical history and identical content commits in the same
+second produce the same root commit — so D-025's identity check refused the second. The test
+helper now varies each root. The guard was right; the fixture was lazy.
 
 ### CON-49 — a gate with one door was decoration
 

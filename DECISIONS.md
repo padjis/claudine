@@ -8,6 +8,33 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-049 · 2026-11-11 · A run has an identity; operations belong to one
+
+**Decision.** Schema 4 adds a `run` table — one row per invocation that touched a document, with
+its kind and start time — and `operation.run_id`. A gather opens one run regardless of how many
+repositories it reads.
+
+**Context.** A gather writes one `operation` row *per repository*, so no operation row can answer
+"which run produced this". A rule proposal is a reading of the evidence one run gathered (D-046),
+so it needs a single thing to reference. Nothing existed to reference.
+
+**Consequences.**
+
+- **Rows written before schema 4 keep `run_id` NULL.** Back-filling a run for them would
+  fabricate provenance — they were written when runs did not exist, and saying so is the honest
+  record. Verified on a real workspace: 7 pre-migration rows stayed NULL across the migration.
+- **An export opens a run only when it accepted scan findings.** An export that found nothing made
+  no decision, and recording it would put an empty event in the audit trail.
+- A scan override joins the run whose evidence it let through — the override and the payload are
+  one event, not two.
+- `run_id` is on the result objects, so a caller does not have to re-query and guess which row is
+  its own.
+- This unblocks CON-51: a rule proposal can now say which run it read.
+
+**Status.** accepted
+
+---
+
 ## D-048 · 2026-11-11 · Rules are only AI-generated, and the catalogue is append-only
 
 **Supersedes D-039's manual-command carve-out**, which kept `rule add` / `behaviour` / `anchor` as

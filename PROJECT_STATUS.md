@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-11
 **Current phase:** Phase 3 — Meaning and reporting (reshaped by D-035 … D-039)
-**Current session:** CON-42 — rule generation, in progress (CON-40, CON-41, CON-45, CON-46 closed)
+**Current session:** CON-51 — rule proposal storage (CON-54 closed; CON-42 in progress)
 
 ---
 
@@ -24,8 +24,8 @@ CON-42 is in progress. The trust boundary on AI output exists — a reply is par
 checked against the evidence actually supplied, and an unusable reply is refused rather than
 silently emptied (D-046). What does not exist is something to produce the reply, and **D-045
 changed what that will be**: the agent surface is an MCP server, so the host supplies the model and
-the next step is a submit path (CON-49) rather than an HTTP client. No Markdown report is rendered
-yet: CON-09.
+the next step is stored rule proposals (CON-51) and a submit path (CON-52) rather than an HTTP
+client. No Markdown report is rendered yet: CON-09.
 
 **Q1 is closed.** All ten original open questions from Session 01 are now resolved.
 
@@ -324,39 +324,68 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-**CON-51 — proposal storage.** A schema change, and the decision needs taking before any code.
+**CON-51 — rule proposal storage, and an append-only catalogue.** Unblocked: a run now has an
+identity to reference (D-049).
 
-**Nothing in the workspace persists a proposal.** An `Interpretation` lives for one `gather()`
-call and leaves two traces: rendered text in the document body, and an `operation` row. The body
-is regenerated on every run (D-043), so:
+Three things it has to settle, and D-048 fixed the shape of the third:
+
+1. **Rule proposals are append-only.** A rule proposal is a dated, attributed reading of one
+   evidence set — it cannot be edited, so a later run makes a new one and "current" is derived.
+2. **The decision lives in its own table**, as `document_version` does, so accepting or rejecting
+   a rule proposal does not mutate the reading.
+3. **The catalogue becomes versioned**, because D-048 removed deletion: an update to a baselined
+   rule is a new version, which makes CON-43 and CON-51 the same change. `CON-53` (withdraw the
+   manual commands, add the `DELETE ON rule` trigger) lands with it.
+
+**The open question that gates the rule-version table:** what identifies a rule? If it is the
+name, a later rule proposal restating the same rule under a different name creates a duplicate
+rather than a new version — which is exactly the failure CON-43 exists to prevent. That needs
+answering before the schema, not after.
+
+Still standing: validation is at **zero discovery conversations** (CON-26).
+
+---
+
+## CON-54 — done when: *one run per invocation, with its operations attached* ✅
+
+| Item | Status |
+| --- | --- |
+| `run` table and `operation.run_id`; schema 4 with a migration | ✅ D-049 |
+| One run per gather, whatever the repository count | ✅ asserted with three |
+| Every operation a run writes belongs to it — no orphans | ✅ |
+| A scan override joins the run whose evidence it let through | ✅ one event, not two |
+| An export opens a run **only** when it accepted findings | ✅ no empty events |
+| Pre-schema-4 rows keep `run_id` NULL | ✅ no fabricated provenance |
+
+### Tests run
 
 ```
-submit a reply   →  proposals rendered into the body
-constat document →  body regenerated, proposals gone
+.venv/bin/python -m pytest  →  561 passed in 37.65s
 ```
 
-That is not a bug in regeneration. It is CON-39's hazard surfacing somewhere new: D-037 makes
-acceptance per-rule and human (CON-44), so a proposal is **durable pre-acceptance state** — it has
-to survive between the run that produced it and the reviewer who later accepts or rejects it. It
-needs a table, not a paragraph.
+19 new tests. The existing 542 needed one change: the migration test asserted `schema_version == 3`
+as a literal, and now asserts against `SCHEMA_VERSION` so a future bump that forgets its migration
+fails there rather than quietly rewriting the expectation.
 
-Three questions the schema has to answer, and each is a product decision:
+### Mutation-checked
 
-1. **Does a second submission replace the previous proposals, or accumulate alongside them?**
-   Accumulating recreates the near-duplicate problem CON-30 was withdrawn for. Replacing destroys
-   a proposal a reviewer may be part-way through judging.
-2. **Is the provider and model recorded, and as what?** Under D-045 the model's identity is
-   self-reported by the client — nearer `assumption` than `observed_fact`, and it must not be
-   stored as the latter.
-3. **Does a proposal carry a durable identity?** CON-39 needs one so a comment can attach to
-   something that survives regeneration. CON-51 and CON-39 may be the same storage question
-   arriving from two directions.
+| Regression | Result |
+| --- | --- |
+| A run opened per repository instead of per invocation | **5 tests failed** |
+| The migration creates `run` but forgets `operation.run_id` | **4 tests failed** |
 
-Then **CON-52** (submit) and **CON-50** (the MCP server) — the latter needs agreeing first, since
-`CLAUDE.md` requires agreement for new infrastructure.
+### Verified on a real workspace
 
-Still standing: validation is at **zero discovery conversations** (CON-26). D-045 removes the
-per-call cost objection, but it does not answer whether anyone wants the output.
+A workspace built at schema 3 by the previous commit: opened, migrated to 4, kept its **7**
+pre-run operation rows NULL, and a fresh gather opened run 1 with its operation attached.
+
+### A fixture of mine tripped a real guard
+
+Registering three repositories failed as a duplicate. `make_subject` seeds byte-identical history,
+and identical content committed in the same second yields the same root commit — so D-025's
+identity check refused the second one. The guard was right and the fixture was lazy; the helper
+now varies each root. Worth noting because it is the third time this session a test problem has
+been my assumption about a fixture rather than a fault in the code.
 
 ---
 
