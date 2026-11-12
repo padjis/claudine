@@ -32,33 +32,33 @@ rules structurally enforced rather than merely intended.
 
 ```mermaid
 flowchart TD
-    CLI[CLI - thin: parse, validate, dispatch, render]
-    MCP[MCP server - stdio, optional extra, four tools]
-    OPS[operations.py - collect, gather, export, submit, render]
+    CLI["CLI — thin: parse, validate, dispatch, render"]
+    MCP["MCP server — stdio, optional extra, four tools"]
+    OPS["operations.py — collect, gather, export, submit, render"]
 
-    subgraph Deterministic - no provider, no network needed
-        GIT[git/ - read-only subprocess, revisions, diffs]
-        EV[evidence/ - bounded excerpts, source pointers]
+    subgraph DET["Deterministic — no provider or network needed"]
+        GIT["git/ — read-only subprocess, revisions, diffs"]
+        EV["evidence/ — bounded excerpts, source pointers"]
     end
 
-    subgraph Interpretation - everything here is ai_interpretation
-        RED[ai/redaction.py - identity never crosses. D-040]
-        SCAN[ai/scanning.py - guard_release on every egress. D-047]
-        PARSE[ai/parsing.py - parse a reply, ground every anchor. D-046]
-        PROV[ai/provider.py - the seam. Registry empty. D-003]
+    subgraph INT["Interpretation — everything here is ai_interpretation"]
+        RED["ai/redaction.py — identity never crosses (D-040)"]
+        SCAN["ai/scanning.py — guard_release on every egress (D-047)"]
+        PARSE["ai/parsing.py — parse a reply, ground every anchor (D-046)"]
+        PROV["ai/provider.py — the seam; registry empty (D-003)"]
     end
 
-    subgraph Governance - a human is the only writer
-        REV[store/acceptance.py - accept and reject]
-        CAT[store/catalogue.py - current rules]
-        PROP[store/proposals.py - rule proposals, append-only]
+    subgraph GOV["Governance — a human is the only writer"]
+        REV["store/acceptance.py — accept and reject"]
+        CAT["store/catalogue.py — current rules"]
+        PROP["store/proposals.py — rule proposals, append-only"]
     end
 
-    DB[SQLite - schema 6. Triggers enforce append-only]
+    DB["SQLite — schema 6; triggers enforce append-only"]
 
     CLI --> OPS
     MCP --> OPS
-    CLI -- human only --> REV
+    CLI -->|"human only"| REV
     OPS --> GIT
     OPS --> EV
     OPS --> RED
@@ -141,26 +141,26 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    subgraph The host - supplies the inference
-        M[Model]
-        C[MCP client]
+    subgraph HOST["The host — supplies the inference"]
+        M["Model"]
+        C["MCP client"]
     end
 
-    subgraph Your machine - Constat holds no API key
-        S[constat mcp - four tools]
-        W[Workspace]
-        R[Repositories]
+    subgraph LOCAL["Your machine — Constat holds no API key"]
+        S["constat mcp — four tools"]
+        W["Workspace"]
+        R["Repositories"]
     end
 
-    H[Human]
+    H["Human"]
 
-    C -- stdio --> S
-    S -- stdio --> C
+    C -->|"stdio"| S
+    S -->|"stdio"| C
     C --> M
     S --> R
     S --> W
-    H -- accept or reject, CLI only --> W
-    S -. never .-> M
+    H -->|"accept or reject, CLI only"| W
+    S -.->|"never"| M
 ```
 
 Two properties that diagram is drawing:
