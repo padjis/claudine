@@ -201,18 +201,30 @@ That is why it refuses by default and why the override is recorded (D-058).
 
 ### The same loop without an agent
 
-Every tool is a CLI command, so the whole thing works by hand — which is how it is tested:
+Two ways, and the difference is only who calls the model. **With a provider configured, there is no
+submit step** — that is what CON-60 was for:
+
+```
+export CONSTAT_AI_PROVIDER=anthropic            # and ANTHROPIC_API_KEY
+constat ticket add 622                          # gathers, reads, fills the queue
+constat rule proposals 622                      # the review queue
+constat rule accept 1 --by you                  # a human decides
+constat publish 622                             # where the business audience reads it
+```
+
+**Without one**, the same loop runs with the reading done by hand. Every tool is a CLI command, so
+this works end to end — and it is how the pipeline is tested, because it needs no key:
 
 ```
 constat document 622 --payload > payload.json   # evidence out, through the gate
 #   …any model, anywhere, reads it…
 constat rule submit 622 --from reply.json       # grounded, stored, discards reported
-constat rule proposals 622                      # the review queue
-constat rule accept 1 --by you                  # a human decides
-constat rule history 1                          # back to the reading, run and evidence
 ```
 
-### Four refusals, each with a test
+Everything after that point is identical. `submit` is not a workaround for a missing feature: it is
+the same door the MCP server uses (D-045), which is why the manual path cannot rot.
+
+### The refusals, each with a test
 
 | Where | Refuses | Why |
 | --- | --- | --- |
@@ -220,6 +232,9 @@ constat rule history 1                          # back to the reading, run and e
 | Export | Author and committer identity, always | Rule generation needs *what* changed, never *who* (D-040) |
 | Submit | A reading whose anchors are not in the evidence | Otherwise the tool invents its own evidence (D-046) |
 | Submit | A reply that cannot be parsed | Returning nothing would read as "no rules were identified" (D-046) |
+| Provider | A call that did not complete | A timeout is not a finding about the code (D-041, D-057) |
+| Publish | A document carrying a credential | A page cannot be recalled; it refuses before cloning (D-058) |
+| Publish | A target that had to be guessed | A push to a guessed URL is not undone by noticing (D-058) |
 | Everywhere | Any non-human acceptance | No tool, CLI or MCP, can accept (D-048, D-055) |
 
 ## 3. Proposed package layout
@@ -230,10 +245,10 @@ As built. Compare with the git history rather than this list if they ever disagr
 constat/
   cli.py              # entry point; thin by design
   config.py           # input validation — shape only (D-016)
-  errors.py           # one type per failure kind; exit codes 2–5
+  errors.py           # one type per failure kind; exit codes 2–6
   models.py           # Pydantic: the published shapes, incl. RuleProposal
   globs.py            # one anchor matcher, shared by grounding and the catalogue
-  operations.py       # collect, gather, export_payload, submit_reply, render
+  operations.py       # collect, gather, export_payload, submit_reply, render, publish
   mcp.py              # the MCP server (optional extra)
   git/
     adapter.py        # read-only discovery and revision resolution (D-019, D-020)
