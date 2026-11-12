@@ -11,7 +11,7 @@ silently; a trigger cannot be bypassed by forgetting to call the right helper.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 SCHEMA = """
 CREATE TABLE schema_meta (
@@ -123,9 +123,12 @@ CREATE TABLE rule (
 -- means it claims to be new. It is a claim, not a key: a wrong one is a
 -- rejectable interpretation rather than a corrupted identity.
 --
--- `model` is self-reported by whatever produced the reading (D-045), so it is
--- nearer `assumption` than `observed_fact` and must never be presented as the
--- latter.
+-- `model` is self-reported unless `model_attested` says otherwise (D-045,
+-- D-057). Submitted from outside it is a string the caller typed, nearer
+-- `assumption` than `observed_fact`; on the provider path Constat issued the
+-- request and read the id off the response, and only then may it be shown
+-- without the caveat. One column, because the difference is not a matter of
+-- degree: either Constat established it or it was told.
 CREATE TABLE rule_proposal (
     id              INTEGER PRIMARY KEY,
     run_id          INTEGER NOT NULL REFERENCES run(id) ON DELETE CASCADE,
@@ -134,6 +137,7 @@ CREATE TABLE rule_proposal (
     revises_rule_id INTEGER REFERENCES rule(id),
     provider        TEXT    NOT NULL,
     model           TEXT,
+    model_attested  INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT    NOT NULL
 );
 
@@ -491,5 +495,16 @@ MIGRATIONS: dict[int, tuple[str, ...]] = {
         " SELECT RAISE(ABORT,"
         " 'rule_version is append-only:"
         " an accepted version cannot be deleted'); END",
+    ),
+    # 6 -> 7: whether Constat established the model id itself (D-057).
+    #
+    # Existing rows keep the default of 0. Not backfilled, and not backfillable:
+    # every reading recorded before this column existed arrived from outside,
+    # and nothing now can establish what read evidence months ago. The same
+    # honest gap as `operation.run_id` at D-049 — a NULL-equivalent that says
+    # "unknown" rather than a value that says "no" by assertion.
+    6: (
+        "ALTER TABLE rule_proposal"
+        " ADD COLUMN model_attested INTEGER NOT NULL DEFAULT 0",
     ),
 }

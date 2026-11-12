@@ -99,14 +99,15 @@ forces them.
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
 | CON-56 | Render from stored state | The document shows the catalogue and the review queue, not just the current run. | ✅ D-056 |
-| CON-57 | A publishing port, and the default target | A document is published to the repository's page tool, through the credential gate. | ⬜ **next** |
+| CON-60 | The first real provider | `CONSTAT_AI_PROVIDER=anthropic` makes `ticket add` fill the review queue with no `rule submit` step, and the recorded model id is the one the API returned. | ✅ D-057 — also closes CON-42 |
+| CON-57 | A publishing port, and the default target | A document is published to the repository's page tool, through the credential gate. | ⬜ needs CON-60 — publishing a document with no rules in it publishes an empty page |
 | CON-58 | Read decisions back, with provenance | A decision records its channel and how identity was established. | ⬜ needs CON-57 |
 | CON-59 | Confluence, GitBook, GitLab docs backends | Each behind the same port, as optional extras. | ⬜ needs CON-57 |
 | CON-29 | Ticket-scoped documentation (`constat document <ref>`) | A proposal can be initialised from a reference found in commit messages, across one or more repositories. | 🔁 **promoted** — now the primary workflow, delivered by CON-33/34 |
 | CON-39 | Regeneration must not destroy human input | Re-running an operation preserves every comment and decision, each still attached to what it was about. | ⬜ **blocks CON-12** — reframed by D-043: human *edits* no longer exist, so this is now about durable comment anchors |
 | CON-40 | Rule catalogue storage | Rules, behaviours and anchors persist and report coverage. | ✅ |
 | CON-41 | AI provider interface | A provider can be configured; absent one, Constat reports evidence and states that no rules were identified. | ✅ D-040, D-041 |
-| CON-42 | Rule generation | An AI pass proposes rules, behaviours and anchors from a ticket's evidence, all as `ai_interpretation`. | 🟡 **in progress** — reply parsing and anchor grounding done (D-046); needs rule proposal storage (CON-51), a submit path (CON-52), and a host (CON-50) |
+| CON-42 | Rule generation | An AI pass proposes rules, behaviours and anchors from a ticket's evidence, all as `ai_interpretation`. | ✅ — the trust boundary at D-046, storage at CON-51, the submit path at CON-52, the MCP host at CON-50, and the provider itself at CON-60/D-057 |
 | CON-49 | Export the payload through the same gate | The payload can be handed out, and only through the credential gate. | ✅ D-047 — `document --payload` |
 | CON-54 | Run identity | One run per invocation, with its operations attached to it. | ✅ D-049 — schema 4; prerequisite for CON-51 |
 | CON-51 | Rule proposal storage | A rule proposal survives the run that produced it and the regeneration of the body. | ✅ D-051 — schema 5; the versioned catalogue lands with CON-44 |

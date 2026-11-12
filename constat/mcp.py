@@ -220,7 +220,7 @@ def build_server(workspace_home: str | None = None):
                         "decision": item.decision,
                         "read_by": item.provider,
                         "model": item.model,
-                        "model_is_self_reported": True,
+                        "model_is_self_reported": not item.model_attested,
                         "run_id": item.run_id,
                     }
                     for item in stored

@@ -47,6 +47,13 @@ class Interpretation:
     provider: str
     proposals: tuple[RuleProposal, ...] = ()
     model: str | None = None
+    model_attested: bool = False
+    """Whether Constat established the model id itself or was told it.
+
+    True only when Constat issued the request and read the id back off the
+    response. A reading submitted from outside carries whatever the caller
+    typed, which is provenance worth keeping and not a fact worth presenting
+    as one (D-045, D-057)."""
     note: str = ""
     rejections: tuple[Rejection, ...] = ()
     """Proposals the provider returned that were discarded, with reasons. Part

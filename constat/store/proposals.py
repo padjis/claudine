@@ -40,6 +40,7 @@ class StoredRuleProposal:
     provider: str
     model: str | None
     created_at: str
+    model_attested: bool = False
     revises_rule_id: int | None = None
     decision: str | None = None
     decided_by: str | None = None
@@ -53,6 +54,18 @@ class StoredRuleProposal:
     @property
     def claims_to_revise(self) -> bool:
         return self.revises_rule_id is not None
+
+    @property
+    def attribution(self) -> str:
+        """Who read the evidence, and how firmly that is known (D-057).
+
+        One property rather than a string built at each display site: the
+        document and the CLI both show this, and the caveat is the part that
+        would quietly go missing if they each assembled it. An unattested
+        reading must never render like an attested one.
+        """
+        reader = self.provider + (f" ({self.model})" if self.model else "")
+        return reader if self.model_attested else f"{reader}, self-reported"
 
     def describe(self) -> str:
         state = self.decision or "awaiting a decision"
@@ -72,19 +85,25 @@ class RuleProposals:
         provider: str,
         model: str | None = None,
         revises_rule_id: int | None = None,
+        model_attested: bool = False,
     ) -> int:
         """Store one reading and return its identity.
 
-        `provider` and `model` are **self-reported** by whatever produced the
-        reading (D-045). They are recorded because a reviewer cannot weigh a
-        reading without knowing what made it — and they are not an observed
-        fact, so nothing may present them as one.
+        `provider` and `model` are recorded because a reviewer cannot weigh a
+        reading without knowing what made it.
+
+        `model_attested` says which of two things the model id is. False — the
+        default, and the only value on the `submit_reply` path — means the
+        caller asserted it (D-045): provenance worth keeping, not an observed
+        fact. True means Constat issued the request and read the id off the
+        response (D-057). The default is the weaker claim, so a caller that
+        forgets the argument understates rather than overstates.
         """
         with self._workspace.transaction() as ws:
             cursor = ws.execute(
                 "INSERT INTO rule_proposal "
                 "(run_id, name, statement, revises_rule_id, provider, model, "
-                " created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                " model_attested, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     run_id,
                     proposal.name,
@@ -92,6 +111,7 @@ class RuleProposals:
                     revises_rule_id,
                     provider,
                     model,
+                    int(model_attested),
                     utc_now(),
                 ),
             )
@@ -243,6 +263,7 @@ class RuleProposals:
             ),
             provider=row["provider"],
             model=row["model"],
+            model_attested=bool(row["model_attested"]),
             created_at=row["created_at"],
             revises_rule_id=row["revises_rule_id"],
             decision=None if decision is None else decision["decision"],

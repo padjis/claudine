@@ -14,9 +14,9 @@ who believed they had configured a provider: a confidently wrong empty result,
 which is the failure mode the product exists to prevent. So an unknown
 provider name and a missing credential are both errors.
 
-The registry is empty until CON-42 implements a real provider. `resolve`
-accepts an injected registry so the configuration path is testable without a
-network, a key or a cost.
+`resolve` accepts an injected registry so the configuration path stays
+testable without a network, a key or a cost — which is also how the real
+provider is tested (CON-60).
 """
 
 from __future__ import annotations
@@ -26,19 +26,25 @@ from collections.abc import Callable, Mapping
 
 from ..errors import ProviderNotConfigured, UnknownProvider
 from .provider import NULL_PROVIDER_NAME, NullProvider, Provider
+from .providers import anthropic
 
 PROVIDER_ENV = "CONSTAT_AI_PROVIDER"
 """Names the provider. Unset, empty or "none" means the null provider."""
 
 ProviderFactory = Callable[[Mapping[str, str]], Provider]
 
-CREDENTIAL_ENV: dict[str, str] = {}
-"""Provider name → the environment variable holding its credential.
-Populated alongside each real provider in CON-42."""
+CREDENTIAL_ENV: dict[str, str] = {anthropic.PROVIDER_NAME: anthropic.KEY_ENV}
+"""Provider name → the environment variable holding its credential. The
+variable is read here and passed to the factory; it is never stored."""
 
-PROVIDERS: dict[str, ProviderFactory] = {}
-"""Deliberately empty. No provider is implemented yet (CON-42), and an empty
-registry is the honest way to say so — unlike an entry that exists but fails."""
+PROVIDERS: dict[str, ProviderFactory] = {anthropic.PROVIDER_NAME: anthropic.build}
+"""The implemented providers. A name absent from here is an error rather than
+a quiet fallback to the null provider, so adding one is the only way to make
+`CONSTAT_AI_PROVIDER` accept it.
+
+The values are factories, and each imports its SDK inside itself. Registering
+a provider therefore adds no import to `import constat`: the dependency
+arrives only when a run actually resolves this entry."""
 
 
 def resolve(

@@ -32,6 +32,14 @@ dev = ["pytest>=8", "mcp>=2"]
 # carry a protocol library they never run, and the evidence pipeline must keep
 # working with nothing but pydantic installed (D-003).
 mcp = ["mcp>=2"]
+# The Anthropic provider is opt-in too: `pip install constat[ai]`. It is the
+# only thing in the project that costs money per run, and the evidence path
+# never reaches it — `CONSTAT_AI_PROVIDER` is unset by default, which resolves
+# to the null provider (D-003, D-057). `dev` omits it deliberately: the
+# provider's tests inject a transport, so the suite needs no SDK, no key and
+# no network, and a test that accidentally called out would fail to import
+# rather than bill.
+ai = ["anthropic>=0.40"]
 
 [project.scripts]
 constat = "constat.cli:main"

@@ -39,8 +39,12 @@ from .git import (
 PROG = "constat"
 DESCRIPTION = "Turn software changes into evidence-backed, human-approved knowledge."
 EPILOGUE = (
-    "Reports file changes, commits and bounded evidence. Nothing is classified "
-    "or interpreted yet, and no report is rendered. See PROJECT_STATUS.md."
+    "Gathers a ticket's evidence across the registered repositories, renders a "
+    "document from it, and keeps a catalogue of business rules. Rules are "
+    "proposed by an AI reading of the evidence and accepted only by a person: "
+    "set CONSTAT_AI_PROVIDER to have Constat do the reading itself, or submit "
+    "one with `rule submit`. With no provider configured the evidence path "
+    "still runs in full."
 )
 
 EXIT_OK = 0
@@ -424,10 +428,9 @@ def _report_proposals(proposals, reference: str, include_decided: bool) -> int:
     print(f"{len(stored)} rule proposal(s) for {reference}:")
     for item in stored:
         state = item.decision or "awaiting a decision"
-        reader = item.provider + (f" ({item.model})" if item.model else "")
         print(f"  [{item.id}] {item.proposal.name} — {state}")
         print(f"      {item.proposal.statement}")
-        print(f"      read by {reader} (self-reported), run {item.run_id}")
+        print(f"      read by {item.attribution}, run {item.run_id}")
         if item.claims_to_revise:
             print(f"      claims to revise rule {item.revises_rule_id}")
     return EXIT_OK

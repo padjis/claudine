@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-12
 **Current phase:** Phase 3 — Meaning and reporting (reshaped by D-035 … D-039)
-**Current session:** CON-57 — a publishing port (CON-09, CON-56 closed)
+**Current session:** CON-57 — a publishing port (CON-09, CON-56, CON-60/CON-42 closed)
 
 ---
 
@@ -15,17 +15,25 @@ A workspace now persists repositories, tickets, living documents and a rule cata
 reference gathers evidence across every registered repository (CON-34) and the catalogue reports
 which changed paths no rule claims (CON-40).
 
-**No rules are produced yet, and nothing deterministic can produce them** — D-035 settled that a
-rule is a business statement no code signal yields, and D-039 made generation an AI pass. CON-41
-built the seam for it: the provider registry is deliberately empty, nothing leaves the machine, and
-the document states that no rules were *identified* rather than implying none exist.
+**Rules are produced, and nothing deterministic produces them** — D-035 settled that a rule is a
+business statement no code signal yields, and D-039 made generation an AI pass. There are now
+three ways a reading reaches the workspace, and all three land in the same append-only review
+queue with the same grounding check behind them:
 
-CON-42 is in progress. The trust boundary on AI output exists — a reply is parsed, every anchor is
-checked against the evidence actually supplied, and an unusable reply is refused rather than
-silently emptied (D-046). What does not exist is something to produce the reply, and **D-045
-changed what that will be**: the agent surface is an MCP server, so the host supplies the model and
-the next step is stored rule proposals (CON-51) and a submit path (CON-52) rather than an HTTP
-client. CON-09 is closed by CON-56: the document renders from stored state.
+| Path | Who calls the model | Model id |
+| --- | --- | --- |
+| `CONSTAT_AI_PROVIDER=anthropic` + `ticket add` | Constat | attested |
+| `constat mcp`, driven by an agent | the host | self-reported |
+| `rule submit --from reply.json` | you, by hand | self-reported |
+
+**With no provider configured the evidence path still runs in full**, and the document says no
+rules were *identified* rather than implying none exist (D-041). That is the default: a fresh
+install has no API key and makes no network call.
+
+CON-42 is closed by CON-60. The pieces arrived separately — the trust boundary at D-046, storage at
+CON-51, the submit path at CON-52, the MCP host at CON-50, and finally a provider that issues the
+request itself at D-057. CON-09 is closed by CON-56: the document renders from stored state and
+works as a pull-request body.
 
 **Q1 is closed.** All ten original open questions from Session 01 are now resolved.
 
@@ -340,6 +348,90 @@ other backends).
 
 Still standing: validation is at **zero discovery conversations** (CON-26), and `tryconstat.com`
 is unregistered (CON-21).
+
+---
+
+## CON-60 — done when: *a provider fills the review queue on its own* ✅
+
+**Also closes CON-42.** `CONSTAT_AI_PROVIDER=anthropic` makes `constat ticket add 622` gather the
+evidence, read it, and store rule proposals in one command. `D-057` records the decision.
+
+### What changed
+
+| File | Change |
+| --- | --- |
+| `constat/ai/providers/anthropic.py` | **new** — the first real provider. Streams the payload with adaptive thinking, hands the reply to the existing `parse`, returns the model id the response carried. |
+| `constat/ai/providers/__init__.py` | **new** — the package, documenting why the SDK import sits inside the factory. |
+| `constat/ai/settings.py` | `PROVIDERS` and `CREDENTIAL_ENV` are no longer empty. `CONSTAT_AI_MODEL` overrides a default of `claude-opus-5`. |
+| `constat/ai/provider.py` | `Interpretation.model_attested`, defaulting to `False`. |
+| `constat/errors.py` | `ProviderFailed` — a call that did not complete, under `ProviderError`. |
+| `constat/store/schema.py` | **schema 7**: `rule_proposal.model_attested`, with the 6 → 7 migration. |
+| `constat/store/proposals.py` | `record(model_attested=...)`, and one `attribution` property both display sites now use. |
+| `constat/operations.py` | `gather` passes the flag through; the document's queue reads `item.attribution`. |
+| `constat/cli.py` | same for `rule proposals`; the epilogue no longer claims nothing is interpreted. |
+| `constat/mcp.py` | `model_is_self_reported` is derived rather than hardcoded `True`. |
+| `pyproject.toml` | `[ai]` extra. `dev` deliberately omits it. |
+| `ARCHITECTURE.md` | § 2.1's "Constat never calls a model" is now scoped to the MCP path; integrity rules 9 and 10 added. |
+
+### Tests — actually run
+
+`.venv/bin/python -m pytest` → **747 passed** in 112s (from 742 before this ticket, 723 before
+CON-56). `tests/test_provider_anthropic.py` is new: 23 tests.
+
+**No key, no network, no cost.** The transport is injected, so `interpret` and the real `parse`
+run against canned replies. Where the SDK's own shape matters, a fake `anthropic` module is put in
+`sys.modules`. The `anthropic` package is not installed in this venv and is not in `dev`.
+
+Mutation-checked, five mutations, each caught by the test that names the property:
+
+| Mutation | Caught by |
+| --- | --- |
+| The transport swallows a failure and returns an empty reply | `test_an_sdk_exception_becomes_ProviderFailed` |
+| Record the requested model instead of the resolved one | `test_the_response_model_is_what_is_recorded` + 2 more |
+| `record(model_attested=True)` by default | `test_the_default_is_the_weaker_claim` + 2 more |
+| The reply text keeps thinking blocks | `test_the_reply_text_skips_thinking_blocks` |
+| `attribution` drops the caveat unconditionally | `test_a_submitted_reading_keeps_it` + 1 more |
+
+One mutation proved nothing on the first attempt — breaking the error handling inside
+`_sdk_transport` failed no test, because every test injected its own transport. That gap was real,
+not a flaw in the check, and `TestTheSdkTransport` now covers it.
+
+### Verified on a real repository
+
+This repository, cloned with mainline rewound six commits so `CON-44` had evidence ahead of it:
+
+- payload **54,056 bytes**, 8 file paths, commit fields sent are `['body', 'files', 'sha', 'subject']` — no author field exists to leak
+- the grounded rule stored and shown as `read by anthropic (claude-opus-5-20260114)`, no caveat
+- the ungrounded one discarded: *"no anchor grounded in the evidence supplied"*
+- accepted → rule 1 version 1; regenerating with no provider shows it as an impacted rule
+- the string `emmanuel` **is** in the payload, in diff content (`--by emmanuel` in this repo's own
+  docs and tests). That is evidence, not identity: redaction strips commit metadata, and scrubbing
+  names out of file content would destroy the thing being reviewed.
+
+The 6 → 7 migration was also run against a pre-existing schema-6 workspace holding a rule
+proposal: the row survived and kept `model_attested = 0`, so its caveat stayed.
+
+### Known issues and what was left undone
+
+- **No real API call has ever been made.** Every test and every verification used an injected or
+  faked transport. The request shape is asserted against the SDK's documented interface, not
+  against the service. The first real call is the first genuine test of it.
+- **Structured outputs are not used.** `output_config` would make `MalformedResponse` unreachable
+  on this path. `parse` still has to run for grounding, so this is an improvement rather than a
+  simplification — worth a ticket, not done here.
+- **No retry, no backoff, no rate-limit handling.** A 429 is a `ProviderFailed` and the run stops.
+  Correct but blunt; a long multi-repository ticket may want better.
+- **Cost is unmeasured.** A 54 KB payload is roughly 14k input tokens, so a few cents per ticket on
+  Opus 5 — estimated from payload size, not observed on a bill.
+- **The prompt is unvalidated.** `SYSTEM` has never been run against a real model, so how good the
+  readings are is entirely unknown. That is the next thing worth learning, and it needs a key.
+
+### Next smallest task
+
+**CON-57** — a publishing port and the default target, as planned. Alternatively, and arguably
+more valuable first: configure a key, run `ticket add` against one real ticket, and read what comes
+back. Everything structural is in place; the quality of the readings is the one thing no test here
+can tell you.
 
 ---
 

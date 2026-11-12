@@ -363,10 +363,38 @@ class TestResolvingAProvider:
             )
         assert "available: fake" in str(exc.value)
 
-    def test_the_registry_ships_empty(self):
-        """No provider is implemented yet, and that is stated by an empty
-        registry rather than by an entry that fails when used."""
-        assert settings.PROVIDERS == {}
+    def test_every_registered_provider_declares_its_credential(self):
+        """This replaced an assertion that the registry ships empty, which was
+        true until CON-60 implemented one. The property worth keeping is not
+        the emptiness: it is that a registered name cannot be resolved without
+        its credential being checked, which only happens if `CREDENTIAL_ENV`
+        knows about it. A provider in one dict and not the other would resolve
+        with no key and fail at the network instead."""
+        assert settings.PROVIDERS
+        for name in settings.PROVIDERS:
+            assert name in settings.CREDENTIAL_ENV
+
+    def test_registering_a_provider_imports_no_sdk(self):
+        """D-003 as an import-time property, not a promise in a docstring.
+
+        `PROVIDERS` holds factories whose SDK imports sit inside them, so a
+        user who installed neither extra can still run the evidence pipeline.
+        Moving `import anthropic` to module scope in the provider would pass
+        every other test in this file and break that."""
+        import subprocess
+        import sys
+
+        probe = (
+            "import sys, constat.ai, constat.cli;"
+            " from constat.ai.settings import resolve;"
+            " resolve({'CONSTAT_AI_PROVIDER': 'anthropic',"
+            "          'ANTHROPIC_API_KEY': 'not-a-real-key'});"
+            " assert 'anthropic' not in sys.modules, sorted(sys.modules)"
+        )
+        # A subprocess because this test module has already imported half of
+        # Constat; `sys.modules` here says nothing about a cold start.
+        done = subprocess.run([sys.executable, "-c", probe], capture_output=True)
+        assert done.returncode == 0, done.stderr.decode()
 
     def test_a_missing_credential_is_refused(self, monkeypatch):
         monkeypatch.setitem(settings.CREDENTIAL_ENV, "fake", "FAKE_API_KEY")

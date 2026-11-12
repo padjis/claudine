@@ -45,7 +45,7 @@ flowchart TD
         RED["ai/redaction.py — identity never crosses (D-040)"]
         SCAN["ai/scanning.py — guard_release on every egress (D-047)"]
         PARSE["ai/parsing.py — parse a reply, ground every anchor (D-046)"]
-        PROV["ai/provider.py — the seam; registry empty (D-003)"]
+        PROV["ai/provider.py + providers/ — the seam, opt-in (D-003, D-057)"]
     end
 
     subgraph GOV["Governance — a human is the only writer"]
@@ -165,10 +165,18 @@ flowchart LR
 
 Two properties that diagram is drawing:
 
-- **Constat never calls a model.** The dotted line is the arrow that does not exist. That is why
-  the provider registry ships empty and why none of this needs an API key (D-003, D-041, D-045).
+- **On the MCP path, Constat never calls a model.** The dotted line is the arrow that does not
+  exist: the host already has the inference, so Constat holding a key as well would mean two
+  billing relationships for one reading. `constat mcp` needs no API key, ever (D-003, D-045).
 - **Acceptance has one door and a model is not behind it.** There is no `accept` tool, and a test
   asserts the live tool list to keep it that way (D-055).
+
+**The other path does call a model, and it is opt-in.** `CONSTAT_AI_PROVIDER=anthropic` makes
+Constat issue the request itself, which is what gives `ticket add` a review queue with no MCP
+client and no `rule submit` (D-057). It changes nothing about the wall: the payload is the same
+redacted, credential-scanned payload, and acceptance is still only reachable from the CLI. Three
+things stay true whichever path is used — identity never crosses (D-040), egress goes through
+`guard_release` (D-047), and with no provider configured the evidence pipeline runs in full.
 
 ### The same loop without an agent
 
@@ -216,9 +224,11 @@ constat/
     scanning.py       # credential detection and guard_release (D-044, D-047)
     parsing.py        # reply -> grounded rule proposals (D-046)
     provider.py       # Provider protocol, NullProvider (D-003, D-039)
-    settings.py       # provider resolution; registry deliberately empty (D-041)
+    settings.py       # provider resolution from the environment only (D-041)
+    providers/
+      anthropic.py    # the one real provider, optional extra (D-057)
   store/
-    schema.py         # schema 6 + migrations + append-only triggers
+    schema.py         # schema 7 + migrations + append-only triggers
     workspace.py      # connection, versioning, transactions
     registry.py       # registered repositories (D-025, D-027, D-028)
     tickets.py        # tickets and their one document (D-029, D-032)
@@ -267,6 +277,10 @@ test exists for each.
 7. Evidence source pointers resolve back to real Git objects.
 8. Parallel release streams do not collapse: baselines are keyed such that two branches can each
    have their own approved history.
+9. A provider failure never reaches the document as a finding: a call that does not complete raises
+   rather than returning an interpretation with no proposals (D-041, D-057).
+10. A self-reported model id is never displayed as an established one. Only a reading Constat
+    issued itself is shown without the caveat (D-057).
 
 ## 6. Security posture
 

@@ -8,6 +8,59 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-057 · 2026-11-12 · The first real provider, and a model id Constat resolved itself
+
+**Implements CON-60.** `CONSTAT_AI_PROVIDER=anthropic` makes `constat ticket add 622` read its own
+evidence and fill the review queue, with no `rule submit` step.
+
+**Decision.** Three parts.
+
+1. **`constat/ai/providers/anthropic.py` implements the `Provider` protocol** and is registered in
+   `PROVIDERS` and `CREDENTIAL_ENV`. It is reached only through `resolve()`, so the null provider
+   stays the default and the pipeline still runs end to end with nothing configured (D-003).
+2. **The model is configuration, not an argument.** `CONSTAT_AI_MODEL` overrides a default of
+   `claude-opus-5`. No `--model` flag is added to `gather`; a reading's model is not something the
+   person running a command should be able to misstate.
+3. **Schema 7 adds `rule_proposal.model_attested`.** On the provider path Constat made the call, so
+   it records the model id **the API response returned** and marks it attested. On the
+   `rule submit` path the value is whatever the caller claimed, and stays unattested.
+
+**Context.** D-045 made every recorded model id self-reported, because every reading arrived from
+outside: `--provider claude --model opus-5` is a string a caller types, and Constat had no way to
+check it. The queue says so — `read by claude (opus-5) (self-reported)`. Once Constat issues the
+request itself that caveat becomes false in one direction and still true in the other, and a single
+undifferentiated label would understate the provider path and overstate the submit path at the same
+time. Product rule 3 is about keeping provenance distinguishable; this is the same distinction one
+level down, inside the provenance itself.
+
+**Consequences.**
+
+- **The requested model and the resolved model are not the same fact.** `claude-opus-5` is an
+  alias; what is stored is `response.model`. A proposal recorded six months ago must still name the
+  model that read the evidence, and an alias would quietly re-point (product rule 5).
+- **A provider failure raises; it never returns an empty `Interpretation`.** `ProviderFailed`
+  joins `MalformedResponse` under `ProviderError`. An empty result would reach the document as "no
+  rules were identified" — D-041 and D-046 refused exactly this, and a network timeout is not a
+  finding about the code.
+- **`anthropic` is an optional extra, not a dependency.** `pip install constat` installs no HTTP
+  client, and the SDK is imported inside the factory rather than at module scope, so registering
+  the provider does not import it. `CLAUDE.md`'s prohibition is on an AI dependency in the critical
+  path, and the critical path is the evidence path.
+- **The credential is read from the environment and never written anywhere**, per `settings.py`.
+  Nothing about the key reaches the workspace; the provider name and model do, because a reviewer
+  needs them.
+- **This costs money per ticket**, which is why it was deferred rather than missing. It is opt-in
+  through an environment variable that defaults to off, so no existing workflow starts billing.
+- **Pre-migration rows have `model_attested = 0`.** Not backfilled: nothing can retroactively
+  establish who read evidence a year ago. Same honest gap as `operation.run_id` (D-049).
+- **The reply contract is JSON, parsed by the existing `parse`.** Structured outputs would make
+  `MalformedResponse` unreachable on this path, which is worth doing later; it is not done here
+  because `parse` also performs the grounding check and that has to run either way.
+
+**Status.** accepted
+
+---
+
 ## D-056 · 2026-11-12 · The document renders from stored state, and works as a pull-request body
 
 **Closes CON-09's core.**

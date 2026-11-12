@@ -76,6 +76,17 @@ class MalformedResponse(ProviderError):
     """
 
 
+class ProviderFailed(ProviderError):
+    """The call to a provider did not complete (CON-60).
+
+    A timeout, a refused connection, a rate limit, a rejected key. Raised
+    rather than returned as an `Interpretation` with no proposals, because an
+    empty interpretation reaches the document as "no rules were identified" —
+    and a network failure is a statement about the network, not about the code
+    under review (D-041, D-057).
+    """
+
+
 class PayloadRefused(ProviderError):
     """A payload was not sent because it contains a credential (CON-45).
 

@@ -337,7 +337,6 @@ def _render_catalogue(view: CatalogueView) -> list[str]:
             "",
         ]
         for item in view.queue:
-            reader = item.provider + (f" ({item.model})" if item.model else "")
             revises = (
                 f", claiming to revise rule {item.revises_rule_id}"
                 if item.revises_rule_id is not None
@@ -348,7 +347,7 @@ def _render_catalogue(view: CatalogueView) -> list[str]:
             # is CON-58, and it is the *unverified* channel when it lands.
             lines.append(f"- [ ] `#{item.id}` **{item.proposal.name}**{revises}")
             lines.append(f"  {item.proposal.statement}")
-            lines.append(f"  Read by {reader}, self-reported.")
+            lines.append(f"  Read by {item.attribution}.")
         lines += [
             "",
             "Ticking a box above records nothing yet. Accept or reject with "
@@ -882,6 +881,7 @@ def gather(
             proposal=proposal,
             provider=interpretation.provider,
             model=interpretation.model,
+            model_attested=interpretation.model_attested,
             revises_rule_id=proposal.revises_rule_id,
         )
 
