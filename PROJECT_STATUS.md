@@ -26,6 +26,13 @@ queue with the same grounding check behind them:
 | `constat mcp`, driven by an agent | the host | self-reported |
 | `rule submit --from reply.json` | you, by hand | self-reported |
 
+**Two backlog statuses were stale and are corrected** (2026-11-12): CON-12 ("no proposal becomes
+official without an explicit human decision") closed at CON-44, and CON-14 (immutable baselines)
+at CON-43. Auditing CON-14 found a real gap rather than only a stale label: `rule_version_behaviour`
+and `rule_version_anchor` are written and frozen by trigger, but **no code path reads them**, so a
+version's behaviours and anchors as they stood at acceptance are in the database and unreachable.
+Raised as **CON-61**.
+
 **With no provider configured the evidence path still runs in full**, and the document says no
 rules were *identified* rather than implying none exist (D-041). That is the default: a fresh
 install has no API key and makes no network call.

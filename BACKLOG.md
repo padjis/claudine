@@ -61,9 +61,9 @@ Ticket register. The single source of truth for *what work exists*; the single s
 
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
-| CON-12 | Implement review decisions | No proposal becomes official without an explicit human decision. | ⬜ |
+| CON-12 | Implement review decisions | No proposal becomes official without an explicit human decision. | ✅ CON-44/D-053 — `--by` is required with no default, decisions are append-only in their own table, and D-055 keeps acceptance out of every MCP tool |
 | CON-13 | Persist proposals and decisions | A restart does not lose review history. | 🔁 **superseded by CON-31** — persistence is now a prerequisite, not Phase 4 |
-| CON-14 | Create immutable approved baselines | A later approval creates a new version; previous content remains recoverable. | ⬜ |
+| CON-14 | Create immutable approved baselines | A later approval creates a new version; previous content remains recoverable. | ✅ CON-43/D-053 — versions are frozen rows with `UPDATE`/`DELETE` aborted by trigger. **Partial on recoverability:** see CON-61 |
 | CON-15 | Compare against the last approved baseline | A reviewer can see what is new since the last approved state. | ⬜ |
 
 ## Phase 5 — GitHub and realistic demonstration
@@ -103,8 +103,9 @@ forces them.
 | CON-57 | A publishing port, and the default target | A document is published to the repository's page tool, through the credential gate. | ⬜ needs CON-60 — publishing a document with no rules in it publishes an empty page |
 | CON-58 | Read decisions back, with provenance | A decision records its channel and how identity was established. | ⬜ needs CON-57 |
 | CON-59 | Confluence, GitBook, GitLab docs backends | Each behind the same port, as optional extras. | ⬜ needs CON-57 |
+| CON-61 | Read a frozen version's behaviours and anchors back | `rule history` can show what a version's behaviours and anchors were at the time it was accepted, not only its name and statement. | ⬜ — completes CON-14's recoverability criterion |
 | CON-29 | Ticket-scoped documentation (`constat document <ref>`) | A proposal can be initialised from a reference found in commit messages, across one or more repositories. | 🔁 **promoted** — now the primary workflow, delivered by CON-33/34 |
-| CON-39 | Regeneration must not destroy human input | Re-running an operation preserves every comment and decision, each still attached to what it was about. | ⬜ **blocks CON-12** — reframed by D-043: human *edits* no longer exist, so this is now about durable comment anchors |
+| CON-39 | Regeneration must not destroy human input | Re-running an operation preserves every comment and decision, each still attached to what it was about. | ⬜ **blocks CON-47/48** — reframed by D-043: human *edits* no longer exist, so this is now about durable comment anchors. Decisions are already safe: CON-12 closed, and a decision is attached to a rule proposal rather than to document prose |
 | CON-40 | Rule catalogue storage | Rules, behaviours and anchors persist and report coverage. | ✅ |
 | CON-41 | AI provider interface | A provider can be configured; absent one, Constat reports evidence and states that no rules were identified. | ✅ D-040, D-041 |
 | CON-42 | Rule generation | An AI pass proposes rules, behaviours and anchors from a ticket's evidence, all as `ai_interpretation`. | ✅ — the trust boundary at D-046, storage at CON-51, the submit path at CON-52, the MCP host at CON-50, and the provider itself at CON-60/D-057 |
