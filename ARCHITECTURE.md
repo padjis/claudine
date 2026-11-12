@@ -32,36 +32,39 @@ rules structurally enforced rather than merely intended.
 
 ```mermaid
 flowchart TD
-    CLI["CLI — argparse. Thin: parse, validate, dispatch, render"]
-    MCP["MCP server — stdio, optional extra. Four tools, no acceptance"]
+    CLI[CLI - thin: parse, validate, dispatch, render]
+    MCP[MCP server - stdio, optional extra, four tools]
+    OPS[operations.py - collect, gather, export, submit, render]
 
-    OPS["operations.py — collect, gather, export_payload, submit_reply, render"]
-
-    subgraph DET["Deterministic. Works with no provider, no network"]
-        GIT["git/ — read-only subprocess, revision resolution, diffs"]
-        EV["evidence/ — bounded excerpts, source pointers, reproduce commands"]
+    subgraph Deterministic - no provider, no network needed
+        GIT[git/ - read-only subprocess, revisions, diffs]
+        EV[evidence/ - bounded excerpts, source pointers]
     end
 
-    subgraph INT["Interpretation. Everything here is ai_interpretation"]
-        RED["ai/redaction.py — identity never crosses. D-040"]
-        SCAN["ai/scanning.py — guard_release. Every egress path. D-047"]
-        PARSE["ai/parsing.py — parse a reply, ground every anchor. D-046"]
-        PROV["ai/provider.py, settings.py — the seam. Registry empty. D-003"]
+    subgraph Interpretation - everything here is ai_interpretation
+        RED[ai/redaction.py - identity never crosses. D-040]
+        SCAN[ai/scanning.py - guard_release on every egress. D-047]
+        PARSE[ai/parsing.py - parse a reply, ground every anchor. D-046]
+        PROV[ai/provider.py - the seam. Registry empty. D-003]
     end
 
-    subgraph GOV["Governance. A human is the only writer"]
-        REV["store/acceptance.py — Review. accept / reject"]
-        CAT["store/catalogue.py — current rules"]
-        PROP["store/proposals.py — rule proposals, append-only"]
+    subgraph Governance - a human is the only writer
+        REV[store/acceptance.py - accept and reject]
+        CAT[store/catalogue.py - current rules]
+        PROP[store/proposals.py - rule proposals, append-only]
     end
 
-    DB[("SQLite — schema 6. Triggers enforce append-only")]
+    DB[SQLite - schema 6. Triggers enforce append-only]
 
     CLI --> OPS
     MCP --> OPS
-    CLI -->|"human only"| REV
-    OPS --> DET
-    OPS --> INT
+    CLI -- human only --> REV
+    OPS --> GIT
+    OPS --> EV
+    OPS --> RED
+    OPS --> SCAN
+    OPS --> PARSE
+    OPS --> PROV
     OPS --> PROP
     REV --> CAT
     REV --> PROP
@@ -100,36 +103,36 @@ sequenceDiagram
     participant Host as MCP client
     participant Model
     participant Constat as constat mcp
-    participant Repos as Registered repositories
+    participant Repos as Repositories
     participant Store as Workspace
 
-    Dev->>Host: "work out what ticket 622 changed"
-    Host->>Constat: spawn on stdio · initialize · list_tools
-    Constat-->>Host: gather_evidence · get_payload · submit_rules · list_rule_proposals
+    Dev->>Host: work out what ticket 622 changed
+    Host->>Constat: spawn on stdio, initialise, list tools
+    Constat-->>Host: four tools, none of which can accept
 
-    Host->>Constat: gather_evidence(622)
-    Constat->>Repos: resolve the ticket's commits, read-only
+    Host->>Constat: gather evidence for 622
+    Constat->>Repos: resolve the ticket commits, read-only
     Constat->>Store: record the run and one operation per repository
-    Constat-->>Host: every repository searched, including those contributing nothing
+    Constat-->>Host: every repository searched, including the empty ones
 
-    Host->>Constat: get_payload(622)
-    Constat->>Constat: strip identity · scan for credentials
-    Constat-->>Host: redacted evidence + the rule catalogue
-    Note over Constat,Host: a credential here refuses instead of exporting
+    Host->>Constat: get payload for 622
+    Constat->>Constat: strip identity, then scan for credentials
+    Constat-->>Host: redacted evidence plus the rule catalogue
+    Note over Constat,Host: a credential refuses instead of exporting
 
     Host->>Model: the payload, as context
-    Model-->>Host: rules, behaviours, anchors · optionally "revises: N"
+    Model-->>Host: rules, behaviours, anchors, maybe a revision claim
 
-    Host->>Constat: submit_rules(622, reply)
-    Constat->>Repos: re-gather — the caller's payload is never trusted
-    Constat->>Constat: parse · ground every anchor against real evidence
+    Host->>Constat: submit the reply for 622
+    Constat->>Repos: re-gather, never trusting the caller payload
+    Constat->>Constat: parse, then ground every anchor
     Constat->>Store: store what survives, append-only
-    Constat-->>Host: stored · discarded with reasons · possible duplicates
-    Note over Host,Model: nothing is accepted; no tool here can accept
+    Constat-->>Host: stored, discarded with reasons, possible duplicates
+    Note over Host,Model: nothing is accepted, and no tool here can accept
 
-    Host-->>Dev: N rule proposals awaiting your decision
+    Host-->>Dev: rule proposals awaiting your decision
 
-    Dev->>Constat: constat rule accept 1 --by you
+    Dev->>Constat: rule accept 1 --by you
     Constat->>Store: baseline a frozen rule version
     Note over Dev,Store: the CLI is the only door to this step
 ```
@@ -138,26 +141,26 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    subgraph HOST["The host — supplies the inference"]
-        M["Model"]
-        C["MCP client"]
+    subgraph The host - supplies the inference
+        M[Model]
+        C[MCP client]
     end
 
-    subgraph LOCAL["Your machine — Constat, no API key"]
-        S["constat mcp — 4 tools"]
-        W[("Workspace")]
-        R[("Repositories")]
+    subgraph Your machine - Constat holds no API key
+        S[constat mcp - four tools]
+        W[Workspace]
+        R[Repositories]
     end
 
-    H(["Human"])
+    H[Human]
 
-    C <-->|"stdio"| S
+    C -- stdio --> S
+    S -- stdio --> C
     C --> M
     S --> R
     S --> W
-    H -->|"accept / reject — CLI only"| W
-
-    S -.->|"never"| M
+    H -- accept or reject, CLI only --> W
+    S -. never .-> M
 ```
 
 Two properties that diagram is drawing:
