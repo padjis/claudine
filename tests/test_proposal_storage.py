@@ -28,6 +28,8 @@ from constat.models import Anchor, Behaviour, RuleProposal
 from constat.operations import gather, open_run
 from constat.store import Registry, RuleProposals, TicketStore, Workspace
 
+from helpers import seed_rule
+
 from test_ai import FakeProvider
 from test_runs import distinct_subject
 
@@ -333,8 +335,7 @@ class TestAnchorsAreCandidatesNotKeys:
         from constat.store import Catalogue
 
         catalogue = Catalogue(workspace)
-        catalogue.add_rule("limit", "At most the limit.")
-        catalogue.add_anchor("limit", "rules.py")
+        seed_rule(workspace, "limit", "At most the limit.", anchors=("rules.py",))
 
         candidates = proposals.candidates_for((Anchor(path_glob="rules.py"),))
         assert len(candidates) == 1
@@ -344,13 +345,8 @@ class TestAnchorsAreCandidatesNotKeys:
     ):
         """The reason anchors cannot be the key: one file routinely implements
         several rules, so overlap is ambiguous by construction."""
-        from constat.store import Catalogue
-
-        catalogue = Catalogue(workspace)
-        catalogue.add_rule("limit", "At most the limit.")
-        catalogue.add_rule("audit", "Transfers are audited.")
-        catalogue.add_anchor("limit", "rules.py")
-        catalogue.add_anchor("audit", "rules.py")
+        seed_rule(workspace, "limit", "At most the limit.", anchors=("rules.py",))
+        seed_rule(workspace, "audit", "Transfers are audited.", anchors=("rules.py",))
 
         assert len(proposals.candidates_for((Anchor(path_glob="rules.py"),))) == 2
 
@@ -365,7 +361,7 @@ class TestAnchorsAreCandidatesNotKeys:
         from constat.store import Catalogue
 
         register(workspace, tmp_path, "billing")
-        Catalogue(workspace).add_rule("limit", "At most the limit.")
+        seed_rule(workspace, "limit", "At most the limit.")
         rule_id = workspace.execute(
             "SELECT id FROM rule WHERE name = 'limit'"
         ).fetchone()["id"]

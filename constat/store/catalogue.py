@@ -1,8 +1,20 @@
-"""The rule catalogue (D-038).
+"""The rule catalogue — read-only (D-038, D-048).
 
-Business rules are declared by people, not inferred from code. Each rule
-carries its behaviours and anchors — the paths whose code is understood to
-implement it.
+Each rule carries its behaviours and anchors: the paths whose code is
+understood to implement it.
+
+**Nothing here writes.** A rule is created by `Review.accept` and by nothing
+else, which is what makes "no proposal becomes official without an explicit
+human decision" structural rather than a CLI convention. This class used to
+carry `add_rule`, `add_behaviour` and `add_anchor`; no command ever reached
+them, so they were a writable door into the governance store with nothing
+guarding it. They now live in `tests/helpers.py`, where a writable door is
+harmless, and a test asserts this class has no write surface.
+
+Their validation went with them — a duplicate-name guard keyed on `name`,
+which `test_the_schema_no_longer_makes_a_name_unique` already recorded as a
+leftover of the pre-D-050 model. Identity is the surrogate id, and the real
+path has its own rules about versions.
 
 Nothing here decides what a behaviour *does*. Anchors let Constat say "the
 code behind this behaviour changed in this ticket", which is a statement about
@@ -14,9 +26,8 @@ from __future__ import annotations
 from datetime import datetime
 
 from ..globs import matches_path
-from ..errors import AlreadyRegistered, NotRegistered
 from ..models import Anchor, Behaviour, Rule
-from .workspace import Workspace, utc_now
+from .workspace import Workspace
 
 
 class Catalogue:
@@ -24,75 +35,6 @@ class Catalogue:
 
     def __init__(self, workspace: Workspace) -> None:
         self._workspace = workspace
-
-    # -- writing -----------------------------------------------------------
-
-    def add_rule(self, name: str, statement: str) -> Rule:
-        if self.find(name) is not None:
-            raise AlreadyRegistered(
-                f"rule {name!r} already exists. Add behaviours or anchors to "
-                "it rather than declaring it twice."
-            )
-        self._workspace.execute(
-            "INSERT INTO rule (name, statement, created_at) VALUES (?, ?, ?)",
-            (name, statement, utc_now()),
-        )
-        found = self.find(name)
-        assert found is not None  # just inserted
-        return found
-
-    def add_behaviour(self, rule_name: str, description: str) -> Rule:
-        rule_id = self._rule_id(rule_name)
-        existing = self._workspace.execute(
-            "SELECT 1 FROM behaviour WHERE rule_id = ? AND description = ?",
-            (rule_id, description),
-        ).fetchone()
-        if existing:
-            raise AlreadyRegistered(
-                f"rule {rule_name!r} already has that behaviour."
-            )
-        self._workspace.execute(
-            "INSERT INTO behaviour (rule_id, description, created_at) "
-            "VALUES (?, ?, ?)",
-            (rule_id, description, utc_now()),
-        )
-        found = self.find(rule_name)
-        assert found is not None
-        return found
-
-    def add_anchor(
-        self, rule_name: str, path_glob: str, repository_alias: str | None = None
-    ) -> Rule:
-        rule_id = self._rule_id(rule_name)
-        repository_id = None
-        if repository_alias is not None:
-            row = self._workspace.execute(
-                "SELECT id FROM repository WHERE alias = ?", (repository_alias,)
-            ).fetchone()
-            if row is None:
-                raise NotRegistered(
-                    f"no repository registered as {repository_alias!r}."
-                )
-            repository_id = int(row["id"])
-
-        existing = self._workspace.execute(
-            "SELECT 1 FROM anchor WHERE rule_id = ? "
-            "AND IFNULL(repository_id, -1) = IFNULL(?, -1) AND path_glob = ?",
-            (rule_id, repository_id, path_glob),
-        ).fetchone()
-        if existing:
-            raise AlreadyRegistered(
-                f"rule {rule_name!r} already has that anchor."
-            )
-
-        self._workspace.execute(
-            "INSERT INTO anchor (rule_id, repository_id, path_glob, created_at) "
-            "VALUES (?, ?, ?, ?)",
-            (rule_id, repository_id, path_glob, utc_now()),
-        )
-        found = self.find(rule_name)
-        assert found is not None
-        return found
 
     # -- reading -----------------------------------------------------------
 
@@ -145,15 +87,6 @@ class Catalogue:
         return tuple(sorted(set(paths) - claimed))
 
     # -- internals ---------------------------------------------------------
-
-    def _rule_id(self, name: str) -> int:
-        row = self._workspace.execute(
-            "SELECT id FROM rule WHERE name = ?", (name,)
-        ).fetchone()
-        if row is None:
-            known = ", ".join(r.name for r in self.list()) or "none"
-            raise NotRegistered(f"no rule {name!r}. Declared: {known}.")
-        return int(row["id"])
 
     def _hydrate(self, row) -> Rule:
         rule_id = row["id"]

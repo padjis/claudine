@@ -13,7 +13,7 @@ import pytest
 
 import constat
 from constat.store import SCHEMA_VERSION
-from helpers import git
+from helpers import git, seed_rule
 from constat.cli import PROG, build_parser, main
 
 
@@ -736,9 +736,13 @@ class TestRuleCommands:
 
         with Workspace.open(ws) as workspace:
             catalogue = Catalogue(workspace)
-            catalogue.add_rule("limit", "At most the limit.")
-            catalogue.add_behaviour("limit", "Refused above.")
-            catalogue.add_anchor("limit", "rules.py")
+            seed_rule(
+                workspace,
+                "limit",
+                "At most the limit.",
+                behaviours=("Refused above.",),
+                anchors=("rules.py",),
+            )
 
     def test_show_and_list_still_work(self, tmp_path, capsys):
         ws = self._ws(tmp_path)

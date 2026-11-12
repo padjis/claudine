@@ -27,6 +27,8 @@ from constat.errors import MalformedResponse
 from constat.operations import submit_reply
 from constat.store import Catalogue, Registry, RuleProposals, TicketStore, Workspace
 
+from helpers import seed_rule
+
 from test_runs import distinct_subject
 
 
@@ -366,8 +368,7 @@ class TestTheSharedGlobMatcher:
     ):
         register(workspace, tmp_path)
         catalogue = Catalogue(workspace)
-        catalogue.add_rule("limit", "At most the limit.")
-        catalogue.add_anchor("limit", "**/rules.py")
+        seed_rule(workspace, "limit", "At most the limit.", anchors=("**/rules.py",))
 
         # Grounded at submit time...
         assert submit_reply(
