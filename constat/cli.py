@@ -375,6 +375,19 @@ def _report_submission(result) -> int:
             print(f"    {rejection.describe()}")
 
     print(f"{result.stored_count} rule proposal(s) stored, run {result.run_id}")
+
+    if result.candidates:
+        print()
+        print(
+            f"{result.possible_duplicates} claimed to be new but overlap "
+            "existing rules:"
+        )
+        for proposal_id, rules in sorted(result.candidates.items()):
+            named = ", ".join(str(r) for r in rules)
+            print(f"    [{proposal_id}] anchors overlap rule(s) {named}")
+        print("  Anchor overlap is a candidate, not a verdict — one file often")
+        print("  implements several rules. Check before accepting a duplicate.")
+
     if result.stored_count:
         print()
         print("None of them is accepted. They await a human decision —")

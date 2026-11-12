@@ -1,8 +1,8 @@
 # Project status
 
-**Last updated:** 2026-11-11
+**Last updated:** 2026-11-12
 **Current phase:** Phase 3 — Meaning and reporting (reshaped by D-035 … D-039)
-**Current session:** CON-55 — propose a revision (CON-43, CON-44 closed)
+**Current session:** CON-50 — MCP server, pending agreement (CON-55 closed)
 
 ---
 
@@ -324,28 +324,79 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-**CON-55 — propose a revision, not just a new rule.** The last piece of rule maintenance:
-`candidates_for` finds rules by anchor overlap, but nothing calls it, so every submitted reading
-claims to be new. Until it does, a second reading of the same rule creates a second rule — the
-duplicate CON-43 exists to prevent, arriving by a different route.
+**CON-50 — the MCP server**, which needs agreeing before it is built: `CLAUDE.md` requires
+agreement for new infrastructure, and D-045 assumed stdio rather than a listening HTTP service.
 
-Then **CON-50** (the MCP server), which needs agreeing first.
-
-**The loop is otherwise complete:**
+The workflow is otherwise complete end to end:
 
 ```
-constat document 622 --payload        # evidence out, through the gate
-<any model, anywhere>                 # produces a reply
-constat rule submit 622 --from -      # grounded, stored, discards reported
-constat rule proposals 622            # the review queue
-constat rule accept 1 --by emmanuel   # baselines a frozen version
-constat rule history 1                # the chain back to the evidence
+constat document 622 --payload          # evidence + catalogue out, through the gate
+<any model, anywhere>                   # may claim `revises: <rule_id>`
+constat rule submit 622 --from -        # grounded, stored, discards and overlaps reported
+constat rule proposals 622              # the review queue
+constat rule accept 1 --by emmanuel     # baselines a frozen version
+constat rule history 1                  # the chain back to the evidence
 ```
 
-Also open: the document body still reflects the run that wrote it, so accepted rules are not
-rendered there (CON-09), and comments do not exist yet (CON-39, CON-47, CON-48).
+What is still missing, in rough order of value:
 
-Still standing: validation is at **zero discovery conversations** (CON-26).
+1. **Comments** (CON-39, CON-47, CON-48). D-043 made the body AI-written and comments the only way
+   a human amends it — none of that exists. CON-39's narrowed form is that comments attach only to
+   durable identities, which rule proposals and rule versions now have.
+2. **The document does not show accepted rules** (CON-09). The body reflects the run that wrote it,
+   so the catalogue and the review queue are invisible there.
+3. **A real provider or MCP host.** Everything works today with a reply pasted in by hand.
+
+Still standing: validation is at **zero discovery conversations** (CON-26), and `tryconstat.com`
+is still unregistered (CON-21) while the name sits in a public repository.
+
+---
+
+## CON-55 — done when: *a reading can claim to revise a rule rather than duplicate it* ✅
+
+| Item | Status |
+| --- | --- |
+| The payload carries the catalogue — id, name, statement, anchors | ✅ D-054, the missing input |
+| A reply may name `revises: <rule_id>` | ✅ |
+| An invented claim is rejected like an invented anchor | ✅ symmetric on purpose |
+| A boolean is not a rule id | ✅ `True` is an `int` in Python |
+| Overlap is reported as a candidate, never applied | ✅ D-050 |
+| A claimed revision is not also flagged | ✅ it already decided |
+| The catalogue in the payload carries no identity | ✅ D-040 unaffected |
+
+### Tests run
+
+```
+.venv/bin/python -m pytest  →  675 passed
+```
+
+20 new tests. The existing 655 needed no changes.
+
+### Mutation-checked
+
+| Regression | Result |
+| --- | --- |
+| Ignore the `revises` claim entirely | **8 tests failed** |
+| The payload stops carrying the catalogue | **4 tests failed** |
+| Auto-pick the overlapping candidate | **3 tests failed** |
+
+### The missing piece was an input, not logic
+
+A reading had never been shown what exists, so every reading claimed to be new and the second
+reading of a rule created a duplicate — CON-43's failure arriving by a different route. Adding the
+catalogue to the payload is most of the fix; validating the claim is the rest.
+
+### An honest limit, and how it surfaced
+
+Overlap is **identical glob string**, not glob intersection. A rule anchored to `rules.py` and a
+reading anchored to `**/*.py` overlap in reality and are not flagged. Widening it means comparing
+globs for intersection, which has no exact answer in general, and a warning that fired on every
+broad glob would be noise.
+
+It surfaced because a test I wrote had an `or` escape hatch — `assert candidates == {} or
+possible_duplicates == 1` — which could not fail. Replacing it with the real expectation is what
+exposed the narrowness. An assertion with an alternative branch is usually a sign the expected
+behaviour was not actually understood.
 
 ---
 

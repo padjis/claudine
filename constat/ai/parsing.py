@@ -22,6 +22,11 @@ dropped with a reason.
 **Rejections are reported, not swallowed.** If a model returns eight rules and
 six are discarded, a document showing two and saying nothing has misrepresented
 what happened. Every rejection carries a reason and reaches the document.
+
+A reply may also claim to **revise** an existing rule by naming its id
+(D-050). That claim is checked the same way an anchor is: the rule has to have
+been in the payload. A reading cannot have read a rule it was never shown, so
+claiming a relationship to one is inventing it.
 """
 
 from __future__ import annotations
@@ -86,6 +91,16 @@ class ParseResult:
                 "ungrounded or malformed, listed below."
             )
         return " ".join(parts)
+
+
+def _known_rules(payload: ProviderPayload) -> set[int]:
+    """Rule ids the provider was actually shown.
+
+    A `revises` claim naming a rule that was not in the payload is as
+    ungrounded as an anchor naming a path nobody sent: the reading cannot have
+    read it, so it is inventing a relationship rather than observing one.
+    """
+    return {rule.rule_id for rule in payload.catalogue}
 
 
 def _known(payload: ProviderPayload) -> tuple[set[str], set[str]]:
@@ -183,6 +198,7 @@ def parse(text: str, payload: ProviderPayload) -> ParseResult:
     other seven, but it must not vanish silently either.
     """
     paths, aliases = _known(payload)
+    known_rules = _known_rules(payload)
     proposals: list[RuleProposal] = []
     rejections: list[Rejection] = []
     seen: set[str] = set()
@@ -215,6 +231,23 @@ def parse(text: str, payload: ProviderPayload) -> ParseResult:
             rejections.append(Rejection(label, "duplicate name in one reply"))
             continue
 
+        revises = raw.get("revises")
+        if revises is not None:
+            if not isinstance(revises, int) or isinstance(revises, bool):
+                rejections.append(Rejection(label, "'revises' is not a rule id"))
+                continue
+            if revises not in known_rules:
+                # Symmetric with an ungrounded anchor: the reading is claiming
+                # a relationship to something it was never shown.
+                rejections.append(
+                    Rejection(
+                        label,
+                        f"claims to revise rule {revises}, which was not in "
+                        "the evidence supplied",
+                    )
+                )
+                continue
+
         anchors = _anchors(raw.get("anchors"), paths, aliases)
         if not anchors:
             # Deliberately fatal for the proposal. An unanchored rule can
@@ -232,6 +265,7 @@ def parse(text: str, payload: ProviderPayload) -> ParseResult:
                 statement=statement,
                 behaviours=_behaviours(raw.get("behaviours")),
                 anchors=anchors,
+                revises_rule_id=revises,
             )
         )
 

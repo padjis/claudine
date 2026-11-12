@@ -117,11 +117,31 @@ class RepositoryContext:
 
 
 @dataclass(frozen=True)
+class KnownRule:
+    """A rule already in the catalogue, as the provider sees it.
+
+    Without this a reading cannot propose a *revision* — it has never been
+    shown what exists, so every reading claims to be new and the second
+    reading of a rule creates a duplicate (CON-43). The id is what a reply
+    names in its `revises` field.
+    """
+
+    rule_id: int
+    name: str
+    statement: str
+    anchors: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class ProviderPayload:
     """Everything a provider is given, and nothing else."""
 
     reference: str
     repositories: tuple[RepositoryContext, ...] = ()
+    catalogue: tuple[KnownRule, ...] = ()
+    """Rules already accepted, so a reading can revise one instead of
+    duplicating it. Carries no identity and no evidence — just what the
+    workspace already holds."""
 
     @property
     def commit_count(self) -> int:
@@ -142,7 +162,11 @@ def as_dict(payload: ProviderPayload) -> dict:
     return asdict(payload)
 
 
-def redact(reference: str, findings: tuple[RepositoryFindings, ...]) -> ProviderPayload:
+def redact(
+    reference: str,
+    findings: tuple[RepositoryFindings, ...],
+    catalogue: tuple[KnownRule, ...] = (),
+) -> ProviderPayload:
     """Build the provider payload from gathered findings, stripping identity."""
     repositories = []
     for finding in findings:
@@ -179,7 +203,11 @@ def redact(reference: str, findings: tuple[RepositoryFindings, ...]) -> Provider
                 unreadable=finding.error is not None,
             )
         )
-    return ProviderPayload(reference=reference, repositories=tuple(repositories))
+    return ProviderPayload(
+        reference=reference,
+        repositories=tuple(repositories),
+        catalogue=catalogue,
+    )
 
 
 def _commit_body(commit) -> str:

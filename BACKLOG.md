@@ -108,7 +108,7 @@ forces them.
 | CON-51 | Rule proposal storage | A rule proposal survives the run that produced it and the regeneration of the body. | ✅ D-051 — schema 5; the versioned catalogue lands with CON-44 |
 | CON-53 | Withdraw the manual rule commands | `rule add` / `behaviour` / `anchor` / `remove` are gone, and a trigger aborts `DELETE ON rule`. | ✅ D-048 — landed with CON-51 |
 | CON-52 | Submit a reply from outside | A reply produced anywhere becomes grounded, stored rule proposals via the CLI. | ✅ D-052 — `rule submit`, `rule proposals` |
-| CON-55 | Propose a revision, not just a new rule | The interpretation pass fills `revises_rule_id` from anchor-overlap candidates. | ⬜ D-050 — the last piece of rule maintenance |
+| CON-55 | Propose a revision, not just a new rule | A reading can claim to revise a rule it was shown; overlap warns without deciding. | ✅ D-054 |
 | CON-50 | MCP server | An MCP client can gather evidence, read the payload and submit proposals; approval is never exposed as a tool. | ⬜ D-045 — needs agreement before building (new infrastructure) |
 | CON-45 | Secret scanning before the payload leaves | A payload containing a credential is refused rather than sent. | ✅ D-044 |
 | CON-47 | Document comments | A comment is stored, attributed and anchored to a durable identity; the body stays machine-written. | ⬜ D-043 — needs CON-39's anchor model |
@@ -166,6 +166,29 @@ address, because dropping a diff line would misstate the change.
 payload — roughly 47,000 tokens, for one ticket in one repository. D-039 called the cost real; this
 is the number. CON-42 should treat payload size as a design constraint rather than discover it on a
 bill.
+
+### CON-55 — the missing input was the catalogue
+
+Done. The payload now carries each rule's id, name, statement and anchors, so a reply can name
+`revises: <rule_id>` — and that claim is checked exactly like an anchor: the rule must have been in
+the payload (D-054). An invented claim is rejected for the same reason an invented anchor is.
+
+**Overlap warns and never decides.** A reading claiming to be new is stored as new, with the
+reviewer told what it overlaps. Accepting a second rule on the same file is often correct — one
+file routinely implements several rules — so the warning informs the choice rather than preventing
+it.
+
+**An honest limit, asserted rather than left to be discovered.** Overlap is *identical glob
+string*, not glob intersection: a rule anchored to `rules.py` and a reading anchored to `**/*.py`
+overlap in reality and are not flagged. Widening it means comparing globs for intersection, which
+has no exact answer in general.
+
+**A test of mine had an `or` escape hatch** that could not fail, and replacing it is what surfaced
+that limitation. Worth remembering: an assertion with an alternative branch is usually a sign the
+expected behaviour was not actually understood.
+
+**Mutation-checked:** ignoring the `revises` claim fails 8 tests; the payload dropping the
+catalogue fails 4; auto-picking the overlapping candidate fails 3.
 
 ### CON-44 — the loop closes
 

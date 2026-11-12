@@ -8,6 +8,42 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-054 · 2026-11-12 · A reading may claim to revise a rule it was shown
+
+**Closes the finding half of CON-43.**
+
+**Decision.** The payload carries the catalogue — each rule's id, name, statement and anchors. A
+reply may name `revises: <rule_id>`, and that claim is validated the way an anchor is: the rule
+must have been in the payload. For readings that claim to be new, anchor overlap is computed and
+**reported as a candidate**, never applied.
+
+**Context.** A reading had never been shown what exists, so every reading claimed to be new and the
+second reading of a rule created a duplicate — CON-43's failure arriving by a different route. The
+missing piece was an input, not logic.
+
+**Consequences.**
+
+- **An invented `revises` is rejected like an invented anchor.** A reading cannot have read a rule
+  it was never shown, so claiming a relationship to one is inventing it rather than observing it.
+  The symmetry is deliberate: both are the model asserting something the evidence does not support.
+- **A booleans check is not pedantry.** `True` is an `int` in Python and would otherwise pass as
+  rule id 1.
+- **Overlap warns and never decides** (D-050). A reading that claims to be new is stored as new,
+  and the reviewer is told what it overlaps. Rewriting the claim would be exactly the structural
+  key D-050 refused — and accepting a second rule on the same file is often correct, since one file
+  routinely implements several rules.
+- **A claimed revision is not flagged.** It already decided; warning about it would be noise.
+- **An honest limit, asserted in a test.** Overlap is *identical glob string*, not glob
+  intersection. A rule anchored to `rules.py` and a reading anchored to `**/*.py` overlap in
+  reality and are not flagged. Widening it means comparing globs for intersection, which has no
+  exact answer in general, and a warning that fired on every broad glob would be noise.
+- The catalogue in the payload carries no identity, so D-040 is unaffected — it is the user's own
+  rules, not evidence about people.
+
+**Status.** accepted
+
+---
+
 ## D-053 · 2026-11-11 · Accepting a rule proposal baselines a version; rejecting changes nothing
 
 **Closes CON-44, and most of CON-43.** Schema 6.

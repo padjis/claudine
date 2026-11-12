@@ -17,7 +17,7 @@ point of provenance (product rule 3).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .ai import (
     NULL_PROVIDER_NAME,
@@ -25,6 +25,7 @@ from .ai import (
     Provider,
     ProviderPayload,
     Rejection,
+    KnownRule,
     SecretFinding,
     describe_scan,
     guard_release,
@@ -38,7 +39,7 @@ from .evidence import DEFAULT_LIMITS, EvidenceBundle, ExcerptLimits, collect_evi
 from .git.adapter import Repository, Revision, discover_repository, resolve_revision
 from .git.diff import compare_revisions
 from .models import RegisteredRepository
-from .store import Registry, RuleProposals, TicketStore, Workspace
+from .store import Catalogue, Registry, RuleProposals, TicketStore, Workspace
 from .store.workspace import utc_now
 from .tickets import TicketMatch, TicketStatus, find_ticket_commits
 
@@ -353,6 +354,33 @@ def render(
     return "\n".join(lines)
 
 
+def known_rules(workspace: Workspace) -> tuple[KnownRule, ...]:
+    """The catalogue as a provider sees it.
+
+    Without this a reading has never been shown what exists, so every reading
+    claims to be new and the second reading of a rule creates a duplicate —
+    the failure CON-43 exists to prevent (D-050).
+    """
+    rows = workspace.execute(
+        "SELECT id, name, statement FROM rule ORDER BY id"
+    ).fetchall()
+    rules = []
+    for row in rows:
+        anchors = workspace.execute(
+            "SELECT path_glob FROM anchor WHERE rule_id = ? ORDER BY path_glob",
+            (row["id"],),
+        ).fetchall()
+        rules.append(
+            KnownRule(
+                rule_id=row["id"],
+                name=row["name"],
+                statement=row["statement"],
+                anchors=tuple(a["path_glob"] for a in anchors),
+            )
+        )
+    return tuple(rules)
+
+
 def collect(
     workspace: Workspace,
     reference: str,
@@ -403,7 +431,7 @@ def export_payload(
     override nobody can see afterwards is the same as no scan (D-044).
     """
     findings = collect(workspace, reference, limits)
-    payload = redact(reference, findings)
+    payload = redact(reference, findings, known_rules(workspace))
     scan_findings = guard_release(payload, accepted=accept_scan_findings)
 
     accepted = bool(scan_findings)
@@ -432,10 +460,17 @@ class SubmitResult:
     run_id: int
     stored: tuple[int, ...] = ()
     rejections: tuple[Rejection, ...] = ()
+    candidates: dict[int, tuple[int, ...]] = field(default_factory=dict)
+    """Rule proposal id -> rules its anchors overlap, for readings that claimed
+    to be new. A warning to the reviewer, never a decision (D-050)."""
 
     @property
     def stored_count(self) -> int:
         return len(self.stored)
+
+    @property
+    def possible_duplicates(self) -> int:
+        return len(self.candidates)
 
 
 def submit_reply(
@@ -469,7 +504,7 @@ def submit_reply(
     catalogue.
     """
     findings = collect(workspace, reference, limits)
-    payload = redact(reference, findings)
+    payload = redact(reference, findings, known_rules(workspace))
 
     # Raises MalformedResponse for an unusable reply, rather than storing
     # nothing and letting that read as "no rules were identified" (D-046).
@@ -477,13 +512,33 @@ def submit_reply(
 
     run_id = open_run(workspace, reference, "submit_reply")
     proposals = RuleProposals(workspace)
-    stored = tuple(
-        proposals.record(
-            run_id=run_id, proposal=proposal, provider=provider, model=model
+    stored = []
+    candidates: dict[int, tuple[int, ...]] = {}
+    for proposal in result.proposals:
+        proposal_id = proposals.record(
+            run_id=run_id,
+            proposal=proposal,
+            provider=provider,
+            model=model,
+            revises_rule_id=proposal.revises_rule_id,
         )
-        for proposal in result.proposals
+        stored.append(proposal_id)
+
+        if proposal.revises_rule_id is None:
+            # The reading claims to be new. Anchor overlap cannot decide that
+            # for it (D-050) — one file routinely implements several rules —
+            # but a reviewer about to accept a duplicate needs to see the
+            # candidates rather than discover them later.
+            overlapping = proposals.candidates_for(proposal.anchors)
+            if overlapping:
+                candidates[proposal_id] = overlapping
+
+    return SubmitResult(
+        run_id=run_id,
+        stored=tuple(stored),
+        rejections=result.rejections,
+        candidates=candidates,
     )
-    return SubmitResult(run_id=run_id, stored=stored, rejections=result.rejections)
 
 
 def _document_id(workspace: Workspace, reference: str) -> int:
@@ -571,7 +626,7 @@ def gather(
     # Redaction happens on the real path rather than only where a provider
     # exists. A privacy boundary first exercised by the code that needs it is
     # a boundary first tested in production.
-    payload = redact(reference, findings)
+    payload = redact(reference, findings, known_rules(workspace))
 
     sends_payload = provider.name != NULL_PROVIDER_NAME
     if sends_payload:

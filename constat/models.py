@@ -167,6 +167,11 @@ class RuleProposal(Frozen):
     statement: str = Field(min_length=1)
     behaviours: tuple[Behaviour, ...] = ()
     anchors: tuple[Anchor, ...] = ()
+    revises_rule_id: int | None = None
+    """Which catalogue rule this reading claims to revise (D-050). A claim,
+    not a key: a human accepting the reading accepts the claim with it, and a
+    wrong one is rejectable rather than a corrupted identity. None means the
+    reading claims to be new."""
     provenance: Literal[ProvenanceType.AI_INTERPRETATION] = (
         ProvenanceType.AI_INTERPRETATION
     )

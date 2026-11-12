@@ -19,6 +19,7 @@ from .provider import (
 from .redaction import (
     CommitContext,
     FileChange,
+    KnownRule,
     ProviderPayload,
     RepositoryContext,
     as_dict,
@@ -45,6 +46,7 @@ __all__ = [
     "CommitContext",
     "FileChange",
     "Interpretation",
+    "KnownRule",
     "NullProvider",
     "ParseResult",
     "Provider",
