@@ -158,6 +158,207 @@ def _collect_repository(
     )
 
 
+PR_BODY_LIMIT = 65_536
+"""GitHub's pull-request body limit.
+
+The rendered document has to work as a PR body, and GitHub **truncates a longer
+one silently** — which is the failure D-023 refuses for diff excerpts, one
+level up. So Constat bounds it itself and states the omission.
+
+A real 30-commit document measures about 21 KB, so this bites only on large
+tickets. Stated rather than discovered on the day it does.
+"""
+
+EVIDENCE_HEADING = "## Evidence"
+
+
+def bound_for_pr(body: str, reference: str, limit: int = PR_BODY_LIMIT) -> str:
+    """Trim a document to fit a pull-request body, saying what was dropped.
+
+    The **business half is never trimmed** — it is the half a reviewer decides
+    from. Only the evidence goes, and it goes wholesale with a pointer to the
+    command that shows it in full, the same contract every truncated excerpt
+    carries (D-023).
+    """
+    if len(body) <= limit:
+        return body
+
+    head, _, tail = body.partition(EVIDENCE_HEADING)
+    omitted = len(tail) + len(EVIDENCE_HEADING)
+    notice = [
+        EVIDENCE_HEADING,
+        "",
+        f"**Omitted here: {omitted} characters of evidence.** The full document "
+        f"exceeds the {limit}-character limit for a pull-request body, which "
+        "would otherwise be truncated silently.",
+        "",
+        f"See it in full with `constat document {reference} --show`.",
+        "",
+        "---",
+        "",
+        "The business section above is complete and was not trimmed.",
+        "",
+    ]
+    bounded = head + "\n".join(notice)
+    # The notice itself must fit. If the business half alone exceeds the limit,
+    # say so rather than returning something a forge will cut mid-sentence.
+    if len(bounded) > limit:
+        return (
+            f"# Ticket {reference}\n\n"
+            f"This document is {len(body)} characters and does not fit a "
+            f"pull-request body ({limit}). Read it with "
+            f"`constat document {reference} --show`.\n"
+        )
+    return bounded
+
+
+@dataclass(frozen=True)
+class CatalogueView:
+    """What the workspace holds about rules, as the document shows it.
+
+    Passed *into* `render` rather than letting it reach for a workspace:
+    rendering stays a pure function of stored structure (ARCHITECTURE.md § 2),
+    so it can never discover a fact the store does not already hold.
+    """
+
+    impacted: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    """Current rule name -> the changed paths its anchors matched."""
+    unclaimed: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    """Repository alias -> changed paths no rule claims. The catalogue's
+    failure mode, and it must stay visible (D-038, D-039)."""
+    queue: tuple = ()
+    """Rule proposals awaiting a human decision."""
+    rule_count: int = 0
+    """Rules in the catalogue, impacted or not — so "no rules were identified"
+    can never be printed next to a catalogue that holds some."""
+
+
+def _changed_paths(finding: RepositoryFindings) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            {
+                excerpt.path
+                for commit in finding.commits
+                if commit.bundle is not None
+                for excerpt in commit.bundle.excerpts
+            }
+        )
+    )
+
+
+def catalogue_view(
+    workspace: Workspace,
+    reference: str,
+    findings: tuple[RepositoryFindings, ...],
+) -> CatalogueView:
+    """Read what the workspace knows about rules for this ticket.
+
+    Exists because the document used to render rules from the *current run's*
+    interpretation, so a ticket whose catalogue held three rules still printed
+    "no rules were identified" — a statement about configuration presented as a
+    statement about the code, which is product rule 1's failure mode.
+    """
+    catalogue = Catalogue(workspace)
+    impacted: dict[str, list[str]] = {}
+    unclaimed: dict[str, tuple[str, ...]] = {}
+
+    for finding in findings:
+        paths = _changed_paths(finding)
+        if not paths:
+            continue
+        alias = finding.repository.alias
+        for name, matched in catalogue.rules_matching(alias, paths).items():
+            impacted.setdefault(name, []).extend(matched)
+        missing = catalogue.unmatched_paths(alias, paths)
+        if missing:
+            unclaimed[alias] = missing
+
+    return CatalogueView(
+        impacted={
+            name: tuple(sorted(dict.fromkeys(paths)))
+            for name, paths in sorted(impacted.items())
+        },
+        unclaimed=unclaimed,
+        queue=RuleProposals(workspace).undecided(reference),
+        rule_count=len(catalogue.list()),
+    )
+
+
+def _render_catalogue(view: CatalogueView) -> list[str]:
+    """What the workspace knows about rules touched by this change.
+
+    The business half of the document (product rule 8). It reports *code*
+    being touched, never what a behaviour now does — that remains a reviewer's
+    call (D-035, D-038).
+    """
+    lines: list[str] = []
+
+    if view.impacted:
+        lines += [
+            f"{len(view.impacted)} rule(s) in the catalogue have anchors in what "
+            "this ticket changed. That their implementation was touched is an "
+            "observed fact; whether their behaviour changed is for a reviewer "
+            "to say.",
+            "",
+        ]
+        for name, paths in view.impacted.items():
+            listed = ", ".join(f"`{path}`" for path in paths)
+            lines.append(f"- **{name}** — matched {listed}")
+        lines.append("")
+    elif view.rule_count:
+        lines += [
+            f"None of the {view.rule_count} rule(s) in the catalogue has an "
+            "anchor in what this ticket changed.",
+            "",
+        ]
+
+    if view.unclaimed:
+        total = sum(len(paths) for paths in view.unclaimed.values())
+        lines += [
+            f"**{total} changed path(s) are claimed by no rule.** A catalogue "
+            "only knows the rules it holds, so this is where it is incomplete "
+            "rather than where nothing happened (D-038).",
+            "",
+        ]
+        # One per line rather than a comma-joined run: a real ticket produced
+        # 29 of these, and a single paragraph of 29 paths is not readable in a
+        # document or a pull request. Never abbreviated with "and N more" —
+        # coverage is the thing that has to stay prominent (D-038, D-039).
+        for alias, paths in sorted(view.unclaimed.items()):
+            lines.append(f"In `{alias}`:")
+            lines.append("")
+            lines += [f"- `{path}`" for path in paths]
+            lines.append("")
+
+    if view.queue:
+        lines += [
+            f"{len(view.queue)} rule proposal(s) await a human decision. None "
+            "carries any authority until accepted (D-036, D-037).",
+            "",
+        ]
+        for item in view.queue:
+            reader = item.provider + (f" ({item.model})" if item.model else "")
+            revises = (
+                f", claiming to revise rule {item.revises_rule_id}"
+                if item.revises_rule_id is not None
+                else ""
+            )
+            # A GitHub task list, because this document also has to work as a
+            # pull-request body. Ticking one is inert today; reading ticks back
+            # is CON-58, and it is the *unverified* channel when it lands.
+            lines.append(f"- [ ] `#{item.id}` **{item.proposal.name}**{revises}")
+            lines.append(f"  {item.proposal.statement}")
+            lines.append(f"  Read by {reader}, self-reported.")
+        lines += [
+            "",
+            "Ticking a box above records nothing yet. Accept or reject with "
+            "`constat rule accept <ID> --by <who>`.",
+            "",
+        ]
+
+    return lines
+
+
 def _render_rejections(interpretation: Interpretation) -> list[str]:
     """List proposals the provider offered and the parser discarded.
 
@@ -181,7 +382,9 @@ def _render_rejections(interpretation: Interpretation) -> list[str]:
     return lines
 
 
-def _render_rules(interpretation: Interpretation) -> list[str]:
+def _render_rules(
+    interpretation: Interpretation, view: CatalogueView | None = None
+) -> list[str]:
     """Render the rules section, which always appears.
 
     An absent section would be read as "there are no rules here" — the one
@@ -190,17 +393,21 @@ def _render_rules(interpretation: Interpretation) -> list[str]:
     identified* and *no rules exist*.
     """
     lines = ["## Business rules", ""]
+    if view is not None:
+        lines += _render_catalogue(view)
 
     if not interpretation.identified_rules:
-        lines += [
+        # Scoped to *this run*. Without the qualifier the note read as a
+        # statement about the ticket, while the catalogue beside it held rules.
+        note = (
             interpretation.note
-            or "No rules were identified. That is not a statement that none exist.",
-            "",
-        ]
+            or "No rules were identified. That is not a statement that none exist."
+        )
+        lines += [f"**This run:** {note}", ""]
         return lines + _render_rejections(interpretation)
 
     lines += [
-        f"{len(interpretation.proposals)} rule(s) proposed by "
+        f"**This run:** {len(interpretation.proposals)} rule(s) proposed by "
         f"{interpretation.describe()}. Every one is an interpretation, not a "
         "finding: proposals carry no authority until a human accepts them "
         "individually (D-036, D-039).",
@@ -240,6 +447,7 @@ def render(
     findings: tuple[RepositoryFindings, ...],
     interpretation: Interpretation | None = None,
     scan_section: list[str] | None = None,
+    view: CatalogueView | None = None,
 ) -> str:
     """Render the machine-derived part of a document.
 
@@ -269,9 +477,17 @@ def render(
         "",
     ]
 
+    # Business view first, evidence under its own heading. The two must not be
+    # conflated (product rule 8): one says what this means, the other says what
+    # it rests on.
+    if interpretation is not None:
+        lines += _render_rules(interpretation, view)
+
+    lines += ["## Evidence", ""]
+
     for finding in findings:
         entry = finding.repository
-        lines.append(f"## {entry.alias}")
+        lines.append(f"### {entry.alias}")
         lines.append("")
         lines.append(f"Measured against `{entry.default_branch}`.")
         lines.append("")
@@ -303,7 +519,7 @@ def render(
             lines += ["Found on: " + ", ".join(f"`{r}`" for r in refs), ""]
 
         for commit in finding.commits:
-            lines.append(f"### `{commit.sha[:12]}` {commit.subject}")
+            lines.append(f"#### `{commit.sha[:12]}` {commit.subject}")
             lines.append("")
             lines.append(f"Attributed by {commit.attribution.replace('_', ' ')}.")
             lines.append("")
@@ -332,9 +548,6 @@ def render(
 
     if scan_section:
         lines += scan_section
-
-    if interpretation is not None:
-        lines += _render_rules(interpretation)
 
     lines += ["---", ""]
     if interpretation is not None and interpretation.identified_rules:
@@ -651,10 +864,29 @@ def gather(
 
     interpretation = provider.interpret(payload)
 
-    body = render(reference, findings, interpretation, scan_section)
-
     document_id = _document_id(workspace, reference)
     run_id = open_run(workspace, reference, "gather_evidence")
+
+    # Stored *before* the document is rendered, so the body shows the queue a
+    # reviewer actually faces — including what this run just proposed. Storing
+    # afterwards left the queue a run behind: a reader saw "1 rule proposed"
+    # and an empty queue in the same document.
+    #
+    # Still a separate write from the body, because a reading has to survive
+    # the next regeneration of the prose it appears in (D-048). Rendering it is
+    # display; this is the record.
+    proposals = RuleProposals(workspace)
+    for proposal in interpretation.proposals:
+        proposals.record(
+            run_id=run_id,
+            proposal=proposal,
+            provider=interpretation.provider,
+            model=interpretation.model,
+            revises_rule_id=proposal.revises_rule_id,
+        )
+
+    view = catalogue_view(workspace, reference, findings)
+    body = render(reference, findings, interpretation, scan_section, view)
 
     with workspace.transaction() as ws:
         ws.execute(
@@ -694,18 +926,6 @@ def gather(
                     f"{finding.status.value}: {len(finding.commits)} commit(s)",
                 ),
             )
-
-    # Stored after the document is written, and separately from it: a rule
-    # proposal is a reading that must survive the next regeneration of the body
-    # it was rendered into (D-048). Rendering it is display; this is the record.
-    proposals = RuleProposals(workspace)
-    for proposal in interpretation.proposals:
-        proposals.record(
-            run_id=run_id,
-            proposal=proposal,
-            provider=interpretation.provider,
-            model=interpretation.model,
-        )
 
     return OperationResult(
         reference=reference,

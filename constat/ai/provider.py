@@ -31,7 +31,7 @@ NO_PROVIDER_NOTE = (
     "No AI provider is configured, so no rules were identified. This is a "
     "statement about how Constat is configured, not about this code: rules "
     "may well exist here and go unlisted. Rule identification requires a "
-    "provider (D-039); the evidence above does not."
+    "provider (D-039); the evidence does not."
 )
 
 

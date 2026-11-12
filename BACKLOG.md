@@ -53,7 +53,7 @@ Ticket register. The single source of truth for *what work exists*; the single s
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
 | CON-08 | ~~Classify changes conservatively~~ | — | 🔁 **superseded by CON-40..43.** Classification by code signal was dissolved: D-034 removed flags, D-038 removed migrations, D-035 established that rules are business statements no signal can produce. |
-| CON-09 | Generate the first report | A developer can understand the report without reading raw command output. | ⬜ |
+| CON-09 | Generate the first report | A developer can understand the report without reading raw command output. | ✅ D-056 — business and evidence halves, rendered from stored state; usable as PR markdown |
 | CON-10 | Separate facts from interpretation | Every claim has a provenance type; unsupported claims are visibly uncertain. | ⬜ |
 | CON-11 | Strengthen quality with tests | The report remains safe and useful across realistic Git cases. | ⬜ |
 
@@ -98,6 +98,10 @@ forces them.
 
 | ID | Title | Done when | Status |
 | --- | --- | --- | --- |
+| CON-56 | Render from stored state | The document shows the catalogue and the review queue, not just the current run. | ✅ D-056 |
+| CON-57 | A publishing port, and the default target | A document is published to the repository's page tool, through the credential gate. | ⬜ **next** |
+| CON-58 | Read decisions back, with provenance | A decision records its channel and how identity was established. | ⬜ needs CON-57 |
+| CON-59 | Confluence, GitBook, GitLab docs backends | Each behind the same port, as optional extras. | ⬜ needs CON-57 |
 | CON-29 | Ticket-scoped documentation (`constat document <ref>`) | A proposal can be initialised from a reference found in commit messages, across one or more repositories. | 🔁 **promoted** — now the primary workflow, delivered by CON-33/34 |
 | CON-39 | Regeneration must not destroy human input | Re-running an operation preserves every comment and decision, each still attached to what it was about. | ⬜ **blocks CON-12** — reframed by D-043: human *edits* no longer exist, so this is now about durable comment anchors |
 | CON-40 | Rule catalogue storage | Rules, behaviours and anchors persist and report coverage. | ✅ |

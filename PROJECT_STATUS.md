@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-12
 **Current phase:** Phase 3 — Meaning and reporting (reshaped by D-035 … D-039)
-**Current session:** CON-26 — discovery conversations (CON-50 closed)
+**Current session:** CON-57 — a publishing port (CON-09, CON-56 closed)
 
 ---
 
@@ -25,7 +25,7 @@ checked against the evidence actually supplied, and an unusable reply is refused
 silently emptied (D-046). What does not exist is something to produce the reply, and **D-045
 changed what that will be**: the agent surface is an MCP server, so the host supplies the model and
 the next step is stored rule proposals (CON-51) and a submit path (CON-52) rather than an HTTP
-client. No Markdown report is rendered yet: CON-09.
+client. CON-09 is closed by CON-56: the document renders from stored state.
 
 **Q1 is closed.** All ten original open questions from Session 01 are now resolved.
 
@@ -324,28 +324,84 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-**CON-26 — hold the first discovery conversations.** Not code, and now the thing most clearly
-blocking everything else.
+**CON-57 — a publishing port and the default target.** The document is now worth publishing; the
+place to put it is not built.
 
-The workflow is complete. An MCP client can drive it end to end, a human accepts at the CLI, and
-history is traceable from a rule back to the diff it came from. What has never happened is anyone
-outside this repository looking at the output.
+From the approved plan: a `Target` protocol (`publish`, `read_decisions`), default detection from
+the repository's remote (`github.com` → GitHub pages, `gitlab.*` → GitLab wiki) refusing rather
+than guessing, publishing gated by `guard_release` because it is egress, and credentials from the
+environment only. `constat/git/adapter.py` needs a small read-only `remote_url`.
+
+`PRODUCT_SPEC.md` § 6.2 defers "writing to GitHub" and needs amending first, with the reason
+stated — an amendment note, as D-028 has in § 6.3.
+
+Then **CON-58** (read decisions back, with channel and verification recorded) and **CON-59** (the
+other backends).
+
+Still standing: validation is at **zero discovery conversations** (CON-26), and `tryconstat.com`
+is unregistered (CON-21).
+
+---
+
+## CON-56 — done when: *the document shows the catalogue and the queue, not just the run* ✅
+
+Closing **CON-09**'s core.
+
+| Item | Status |
+| --- | --- |
+| `CatalogueView` + `catalogue_view()` — impacted rules, unclaimed paths, queue | ✅ D-056 |
+| Business section first; evidence under `## Evidence` | ✅ product rule 8 |
+| The run's own result labelled **"This run:"** | ✅ closes the lie |
+| Rendering takes no workspace — a pure function of stored structure | ✅ asserted on the signature |
+| Rule proposals stored *before* the body is rendered | ✅ the queue no longer lags a run |
+| Plain Markdown; usable as a PR body; queue as a task list | ✅ |
+| `bound_for_pr` — business half never trimmed, omission stated | ✅ D-023's rule, one level up |
+| Unclaimed paths one per line, never abbreviated | ✅ D-038, D-039 |
+
+### Tests run
 
 ```
-constat mcp                             # an agent drives the loop over stdio
-constat rule proposals 622              # the review queue
-constat rule accept 1 --by emmanuel     # a human decides; no tool can
-constat rule history 1                  # back to the reading, the run, the evidence
+.venv/bin/python -m pytest  →  723 passed in 83.16s
 ```
 
-If more code is wanted first, in order of value:
+26 new tests. One existing test was rewritten — see below.
 
-1. **Comments** (CON-39, CON-47, CON-48). D-043 made the body AI-written and comments the only way
-   a human amends it, and none of it exists. CON-39's narrowed form — comments attach only to
-   durable identities — is now easy, because rule proposals and rule versions have them.
-2. **The document shows nothing of the catalogue** (CON-09). The body reflects the run that wrote
-   it, so accepted rules and the review queue are invisible there.
-3. **CON-21** — `tryconstat.com` is still unregistered while the name sits in a public repository.
+### Mutation-checked
+
+| Regression | Result |
+| --- | --- |
+| Render from the run instead of stored state | **11 tests failed** |
+| Unscope the run's note | **1 test failed** |
+| Truncate silently instead of stating the omission | **3 tests failed** |
+
+The third needed a second attempt: my first edit produced an `IndentationError`, so the run reported
+zero failures because the module would not import. A mutation that does not compile proves nothing,
+and `grep -c FAILED` does not distinguish that from a passing suite.
+
+### The bug was a lie, not a gap
+
+`constat document 622 --show` printed *"no rules were identified"* while the catalogue held rule 1
+at version 3 and that ticket had rule proposals waiting. The body rendered from the current run's
+`Interpretation`, so a run with no provider reported on the ticket as though nothing were known.
+That is product rule 1's failure mode appearing in the product's own output.
+
+### Two defects found while building it
+
+- **The queue lagged a run behind.** Rule proposals were stored *after* the document was rendered,
+  so a reader saw "1 rule proposed" and an empty queue in the same document. `gather` now stores
+  before rendering.
+- **The note said "the evidence above".** The evidence moved below it in the restructure.
+
+### Verified on both real subjects
+
+| Subject | Document | Fits a PR body | Business signals |
+| --- | --- | --- | --- |
+| B, 8 commits | 5,095 chars | yes | impacted rule named, 29 unclaimed paths listed |
+| A, 30 commits | 21,218 chars | yes | coverage reported |
+
+Subject B surfaced the readability problem: 29 unclaimed paths comma-joined into one paragraph is
+unreadable in a document and worse in a pull request. One per line now, and never abbreviated —
+"and N more" would hide exactly the coverage gap D-038 requires to stay visible.
 
 ---
 

@@ -8,6 +8,49 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-056 · 2026-11-12 · The document renders from stored state, and works as a pull-request body
+
+**Closes CON-09's core.**
+
+**Decision.** `render()` takes a `CatalogueView` — impacted rules, unclaimed paths, the review
+queue, the catalogue size — read from the workspace. The document leads with a **business** section
+and puts the evidence under its own `## Evidence` heading. The current run's own result is labelled
+**"This run:"**. The whole document is plain Markdown and usable as a pull-request body; the review
+queue renders as a GitHub task list.
+
+**Context.** The body rendered from the current run's `Interpretation`, so `constat document 622
+--show` printed *"no rules were identified"* while the catalogue held a rule at version 3 and that
+ticket had rule proposals waiting. A statement about configuration, presented as a statement about
+the code — product rule 1's failure mode, in the product's own output.
+
+**Consequences.**
+
+- **Rendering stays a pure function of stored structure** (ARCHITECTURE.md § 2). The view is passed
+  *in*; `render` takes no workspace and so cannot discover a fact the store does not hold. A test
+  asserts the signature.
+- **Rule proposals are now stored before the body is rendered.** They were stored after, which left
+  the queue a run behind: a reader saw "1 rule proposed" and an empty queue in the same document.
+- **The business half is never trimmed.** `bound_for_pr` drops the evidence section when the
+  document exceeds GitHub's 65,536-character body limit and *states* the omission with the command
+  that shows it in full — because GitHub truncates silently, which is the failure D-023 refuses for
+  diff excerpts one level up. A real 30-commit document measures ~21 KB, so this bites only on
+  large tickets.
+- **Plain Markdown, no raw HTML.** No `<details>` however useful, because the same document has to
+  render in Confluence and GitBook later (CON-59). Asserted in a test so it is not reintroduced.
+- **A tick on the task list is inert and says so.** A checkbox that looks actionable and does
+  nothing is worse than no checkbox. Reading ticks back is CON-58, and it is the *unverified*
+  channel when it lands.
+- **Unclaimed paths are listed one per line and never abbreviated.** A real ticket produced 29;
+  "and N more" would hide the coverage gap that D-038 and D-039 require to stay prominent.
+- A test that asserted the opposite was rewritten rather than deleted: it checked that a rule
+  proposal *disappeared* from a regenerated body, which was the honest description of the old
+  behaviour. It now asserts the stronger property — a later run with no provider still shows the
+  reading, because it reads it back rather than remembering it.
+
+**Status.** accepted
+
+---
+
 ## D-055 · 2026-11-12 · The MCP server exposes four tools, and acceptance is not one of them
 
 **Implements D-045.** `constat mcp` runs an MCP server on **stdio**.

@@ -134,15 +134,24 @@ class TestItSurvivesRegeneration:
     def test_a_rule_proposal_outlives_the_body_it_was_rendered_into(
         self, workspace: Workspace, tmp_path: Path
     ):
+        """The reading survives a regeneration that knows nothing about it.
+
+        Before CON-56 this asserted the name was *absent* from the second body,
+        which was the honest description of a document rendered from the
+        current run's interpretation. The document now renders the queue from
+        stored state, so the stronger property holds: a later run with no
+        provider at all still shows the reading, because it reads it back
+        rather than remembering it.
+        """
         register(workspace, tmp_path, "billing")
         provider = FakeProvider([a_reading()])
 
         first = gather(workspace, "622", provider=provider)
         assert "daily-transfer-limit" in first.body
 
-        # A later run with nothing to say regenerates the body from scratch.
-        second = gather(workspace, "622")
-        assert "daily-transfer-limit" not in second.body
+        second = gather(workspace, "622")  # null provider: nothing to say
+        assert second.interpretation.proposals == ()
+        assert "daily-transfer-limit" in second.body  # read back, not remembered
 
         stored = RuleProposals(workspace).for_ticket("622")
         assert [p.proposal.name for p in stored] == ["daily-transfer-limit"]
