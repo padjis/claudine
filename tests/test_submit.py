@@ -231,7 +231,7 @@ class TestTheCommandLine:
         main(["--workspace", ws, "init"])
         clone = distinct_subject(tmp_path, "billing", "LIMIT = 250\n")
         main(["--workspace", ws, "repo", "add", str(clone), "--name", "billing"])
-        main(["--workspace", ws, "ticket", "add", "622"])
+        main(["--workspace", ws, "ticket", "add", "622", "--no-provider"])
         return ws
 
     def test_it_reads_a_reply_from_a_file(self, tmp_path, capsys):

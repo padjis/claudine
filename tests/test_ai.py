@@ -625,3 +625,131 @@ class TestTheProposalType:
         proposal = RuleProposal(name="x", statement="y")
         with pytest.raises(ValidationError):
             proposal.statement = "z"
+
+
+class TestARuleGeneratingCommandRefusesWithoutAProvider:
+    """D-059. The one misconfiguration that used to succeed.
+
+    D-041 made a *misconfigured* provider fail loudly, and it does: an
+    unimplemented name and a missing credential both exit 5. Nothing
+    configured at all still wrote a document saying "no rules were
+    identified" — accurate, and useless to someone who ran the command to
+    get rules.
+
+    The refusal is at the command boundary on purpose. `operations.gather`
+    still runs with the null provider, because the evidence path must not
+    need a key and because the MCP server depends on it.
+    """
+
+    @pytest.fixture
+    def registered(self, tmp_path: Path):
+        from constat.cli import main
+
+        home = tmp_path / "ws"
+        main(["--workspace", str(home), "init"])
+        main([
+            "--workspace", str(home), "repo", "add",
+            str(make_subject(tmp_path, "billing")), "--name", "billing",
+        ])
+        return home
+
+    def test_ticket_add_refuses(self, registered, monkeypatch, capsys):
+        from constat.cli import EXIT_PROVIDER, main
+
+        monkeypatch.delenv("CONSTAT_AI_PROVIDER", raising=False)
+        code = main(["--workspace", str(registered), "ticket", "add", "622"])
+
+        assert code == EXIT_PROVIDER
+        assert "CONSTAT_AI_PROVIDER is not set" in capsys.readouterr().err
+
+    def test_the_refusal_leaves_no_ticket_behind(self, registered, monkeypatch):
+        """Otherwise `ticket add` refuses to open it again, and the user is
+        stuck with an empty document they cannot regenerate."""
+        from constat.cli import main
+        from constat.store import TicketStore, Workspace
+
+        monkeypatch.delenv("CONSTAT_AI_PROVIDER", raising=False)
+        main(["--workspace", str(registered), "ticket", "add", "622"])
+
+        with Workspace.open(str(registered)) as ws:
+            assert TicketStore(ws).list() == ()
+
+    def test_document_refuses(self, registered, monkeypatch, capsys):
+        from constat.cli import EXIT_PROVIDER, main
+
+        monkeypatch.delenv("CONSTAT_AI_PROVIDER", raising=False)
+        main(["--workspace", str(registered), "ticket", "add", "622",
+              "--no-provider"])
+        code = main(["--workspace", str(registered), "document", "622"])
+
+        assert code == EXIT_PROVIDER
+
+    def test_the_refusal_names_every_way_forward(
+        self, registered, monkeypatch, capsys
+    ):
+        """An objection that does not say what to do instead is a dead end,
+        and there are three different right answers here."""
+        from constat.cli import main
+
+        monkeypatch.delenv("CONSTAT_AI_PROVIDER", raising=False)
+        main(["--workspace", str(registered), "ticket", "add", "622"])
+        err = capsys.readouterr().err
+
+        assert "CONSTAT_AI_PROVIDER=anthropic" in err   # let Constat read it
+        assert "rule submit" in err                     # read it yourself
+        assert "--no-provider" in err                   # evidence only
+
+    def test_no_provider_gathers_the_evidence(self, registered, monkeypatch):
+        from constat.cli import EXIT_OK, main
+
+        monkeypatch.delenv("CONSTAT_AI_PROVIDER", raising=False)
+        code = main(["--workspace", str(registered), "ticket", "add", "622",
+                     "--no-provider"])
+        assert code == EXIT_OK
+
+    def test_a_configured_provider_is_not_refused(self, registered, monkeypatch):
+        """The gate asks whether anything *can* read, not whether a flag was
+        passed."""
+        from constat.cli import EXIT_OK, main
+
+        monkeypatch.setenv("CONSTAT_AI_PROVIDER", "anthropic")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "not-a-real-key")
+        # The provider resolves, so the gate lets it through. The call itself
+        # then fails at the transport, which is a different error entirely —
+        # and proves the gate is not what stopped it.
+        code = main(["--workspace", str(registered), "ticket", "add", "622"])
+        assert code != EXIT_OK  # the network, not the gate
+        assert code == 5
+
+    def test_a_misconfigured_provider_still_fails_differently(
+        self, registered, monkeypatch, capsys
+    ):
+        """D-041's case must keep its own message rather than being absorbed
+        into the new one."""
+        from constat.cli import main
+
+        monkeypatch.setenv("CONSTAT_AI_PROVIDER", "openai")
+        main(["--workspace", str(registered), "ticket", "add", "622"])
+        err = capsys.readouterr().err
+
+        assert "does not implement" in err
+        assert "CONSTAT_AI_PROVIDER is not set" not in err
+
+    def test_gather_itself_does_not_refuse(self, registered, monkeypatch):
+        """The library keeps the guarantee. Moving the refusal into `gather`
+        would make Constat unusable without a key and break the MCP server,
+        where having no provider is correct rather than a misconfiguration
+        (D-045)."""
+        from constat.cli import main
+        from constat.operations import gather
+        from constat.store import Workspace
+
+        monkeypatch.delenv("CONSTAT_AI_PROVIDER", raising=False)
+        main(["--workspace", str(registered), "ticket", "add", "622",
+              "--no-provider"])
+
+        with Workspace.open(str(registered)) as ws:
+            result = gather(ws, "622")  # no provider, no flag, no refusal
+
+        assert result.reference == "622"
+        assert result.interpretation.provider == "none"

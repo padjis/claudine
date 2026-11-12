@@ -39,9 +39,12 @@ guessed. It is the only command that writes outside the workspace; `gather` cann
 accepting does not. Three egress points now exist (`document --payload`, MCP `get_payload`,
 `publish`) and all three go through the same credential detectors.
 
-**With no provider configured the evidence path still runs in full**, and the document says no
-rules were *identified* rather than implying none exist (D-041). That is the default: a fresh
-install has no API key and makes no network call.
+**A rule-generating command now refuses when nothing can read the evidence** (D-059).
+`constat document <REF>` and `ticket add <REF>` exit 5 if `CONSTAT_AI_PROVIDER` is unset, naming
+the three ways forward; `--no-provider` gathers evidence and nothing else. The evidence path still
+needs no key — that guarantee is kept and is now stated out loud by a flag rather than discovered
+from a line of output. MCP is exempt by design: there the host supplies the model, so having no
+provider is correct (D-045), and a test asserts it.
 
 CON-42 is closed by CON-60. The pieces arrived separately — the trust boundary at D-046, storage at
 CON-51, the submit path at CON-52, the MCP host at CON-50, and finally a provider that issues the
@@ -361,6 +364,74 @@ other backends).
 
 Still standing: validation is at **zero discovery conversations** (CON-26), and `tryconstat.com`
 is unregistered (CON-21).
+
+---
+
+## Catalogue made read-only, and the provider gate (2026-11-12) ✅
+
+Two changes from the same session, both prompted by questions rather than by a ticket.
+
+### `Catalogue` has no write surface
+
+`add_rule`, `add_behaviour` and `add_anchor` existed on `Catalogue` and **no command reached
+them** — a rule is created by `Review.accept` and nothing else (D-048). They were a writable door
+into the governance store that production could not use and nothing guarded. They now live in
+`tests/helpers.py` as `seed_rule`/`seed_behaviour`/`seed_anchor`, and a test pins the class surface
+to exactly `find`, `list`, `rules_matching`, `unmatched_paths`, so they cannot return as a
+convenience.
+
+`_rule_id` and two imports went with them as orphans. `TestDeclaring` (10 tests) also went: it
+asserted the validation *inside* those methods — duplicate names, unknown rules, unknown aliases —
+on a path production never took, so keeping it would have meant testing test code. The four tests
+in it that were about the *store* survive as `TestTheCatalogueCannotBeEmptied`, including the new
+surface assertion. Net: −10 tests, +1.
+
+The name-keyed duplicate guard in `add_rule` went too. `test_the_schema_no_longer_makes_a_name_unique`
+had already recorded it as a leftover of the pre-D-050 model, so both halves are now gone rather
+than one.
+
+### A rule-generating command refuses without a provider (D-059)
+
+Asked for directly: the step that should generate rules did not fail when it could not. D-041 had
+already made a *misconfigured* provider fail loudly — an unimplemented name and a missing
+credential both exit 5 — and the case left succeeding was nothing configured at all.
+
+| | Before | Now |
+| --- | --- | --- |
+| `CONSTAT_AI_PROVIDER=openai` | exit 5 | exit 5, same message |
+| `CONSTAT_AI_PROVIDER=anthropic`, no key | exit 5 | exit 5, same message |
+| unset | exit 0, "no rules identified" | **exit 5**, naming three ways forward |
+| unset, `--no-provider` | — | exit 0, evidence only |
+
+**The refusal is at the command boundary, not in `gather`.** 77 library tests call `gather` without
+a provider because they are about evidence; moving the refusal there would make the library unusable
+without a key and would break the MCP server, where having no provider is the design. `ticket add`
+checks *before* creating the ticket, because a refusal that left an opened ticket behind would be
+worse than no ticket — `ticket add` then refuses to open it again.
+
+`CLAUDE.md` is amended in place, with the reason, since this changes a stated prohibition. The
+guarantee underneath is unchanged.
+
+### Tests — actually run
+
+`.venv/bin/python -m pytest` → **781 passed** (779 → 770 after the catalogue change → 781 with the
+gate and its tests). 35 CLI setup calls across six test files gained `--no-provider`: they gather
+evidence rather than generate rules, so saying so is correct rather than a workaround.
+
+Mutation-checked, four mutations on the gate: letting the null provider through fails 3+,
+ignoring `--no-provider` fails 3+, running the gate after the ticket is created fails
+`test_the_refusal_leaves_no_ticket_behind`, and absorbing D-041's message into the new one fails
+`test_a_misconfigured_provider_still_fails_differently`.
+
+### Known issues
+
+- **The default change breaks scripted `document` calls.** Anyone running it in a pipeline gets
+  exit 5 until they add `--no-provider` or configure a provider. Deliberate — a script quietly
+  producing documents with no rules in them was not doing what its author believed — but it is a
+  breaking change to the CLI.
+- **Seeding writes rows directly.** `seed_rule` bypasses the acceptance path, so the fixtures still
+  do not exercise how a rule really comes to exist. Tests that *are* about that use
+  `Review.accept`; the rest are about reading, where it does not matter.
 
 ---
 

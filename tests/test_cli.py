@@ -433,26 +433,26 @@ class TestTicketCommands:
         ws = self._ws(tmp_path)
         capsys.readouterr()
 
-        assert main(["--workspace", ws, "ticket", "add", "622"]) == 0
+        assert main(["--workspace", ws, "ticket", "add", "622", "--no-provider"]) == 0
         out = capsys.readouterr().out
         assert "opened ticket: 622" in out
         assert "Document written" in out
 
         capsys.readouterr()
-        main(["--workspace", ws, "document", "622", "--show"])
+        main(["--workspace", ws, "document", "622", "--show", "--no-provider"])
         assert "# Ticket 622" in capsys.readouterr().out
 
     def test_add_is_refused_twice(self, tmp_path, capsys):
         ws = self._ws(tmp_path)
-        main(["--workspace", ws, "ticket", "add", "622"])
+        main(["--workspace", ws, "ticket", "add", "622", "--no-provider"])
         capsys.readouterr()
 
-        assert main(["--workspace", ws, "ticket", "add", "622"]) == 4
+        assert main(["--workspace", ws, "ticket", "add", "622", "--no-provider"]) == 4
         assert "already exists" in capsys.readouterr().err
 
     def test_list_and_show(self, tmp_path, capsys):
         ws = self._ws(tmp_path)
-        main(["--workspace", ws, "ticket", "add", "622"])
+        main(["--workspace", ws, "ticket", "add", "622", "--no-provider"])
         capsys.readouterr()
 
         assert main(["--workspace", ws, "ticket", "list"]) == 0
@@ -484,7 +484,7 @@ class TestTicketCommands:
         main(["--workspace", ws, "repo", "add", str(clone), "--name", "s"])
         capsys.readouterr()
 
-        assert main(["--workspace", ws, "ticket", "add", "77"]) == 0
+        assert main(["--workspace", ws, "ticket", "add", "77", "--no-provider"]) == 0
         assert "s: pending — 1 commit(s)" in capsys.readouterr().out
 
     def test_landed_work_is_distinguished_from_nothing(self, tmp_path, repo, capsys):
@@ -498,10 +498,10 @@ class TestTicketCommands:
         main(["--workspace", ws, "repo", "add", str(clone), "--name", "s"])
         capsys.readouterr()
 
-        main(["--workspace", ws, "ticket", "add", "88"])
+        main(["--workspace", ws, "ticket", "add", "88", "--no-provider"])
         assert "s: landed" in capsys.readouterr().out
 
-        main(["--workspace", ws, "ticket", "add", "99999"])
+        main(["--workspace", ws, "ticket", "add", "99999", "--no-provider"])
         assert "s: not_found" in capsys.readouterr().out
 
 
@@ -525,14 +525,14 @@ class TestDocumentCommand:
             git(clone, "commit", "-m", "Change the rule (#622)")
             git(clone, "checkout", "--quiet", "main")
             main(["--workspace", ws, "repo", "add", str(clone), "--name", "billing"])
-        main(["--workspace", ws, "ticket", "add", "622"])
+        main(["--workspace", ws, "ticket", "add", "622", "--no-provider"])
         return ws
 
     def test_document_gathers_and_reports(self, tmp_path, capsys):
         ws = self._setup(tmp_path)
         capsys.readouterr()
 
-        assert main(["--workspace", ws, "document", "622"]) == 0
+        assert main(["--workspace", ws, "document", "622", "--no-provider"]) == 0
         out = capsys.readouterr().out
         assert "document updated" in out
         assert "billing: pending" in out
@@ -541,7 +541,7 @@ class TestDocumentCommand:
         ws = self._setup(tmp_path)
         capsys.readouterr()
 
-        assert main(["--workspace", ws, "document", "622", "--show"]) == 0
+        assert main(["--workspace", ws, "document", "622", "--show", "--no-provider"]) == 0
         body = capsys.readouterr().out
         assert "# Ticket 622" in body
         assert "a.py" in body
@@ -551,7 +551,7 @@ class TestDocumentCommand:
         ws = self._setup(tmp_path, with_repo=False)
         capsys.readouterr()
 
-        assert main(["--workspace", ws, "document", "nope"]) == 4
+        assert main(["--workspace", ws, "document", "nope", "--no-provider"]) == 4
         assert "no ticket" in capsys.readouterr().err
 
     def test_it_says_no_rules_were_identified_and_why(self, tmp_path, capsys):
@@ -563,7 +563,7 @@ class TestDocumentCommand:
         ws = self._setup(tmp_path)
         capsys.readouterr()
 
-        assert main(["--workspace", ws, "document", "622"]) == 0
+        assert main(["--workspace", ws, "document", "622", "--no-provider"]) == 0
         out = capsys.readouterr().out
         assert "no rules identified" in out
         assert "no AI provider is configured" in out
@@ -573,7 +573,7 @@ class TestDocumentCommand:
         ws = self._setup(tmp_path)
         capsys.readouterr()
 
-        main(["--workspace", ws, "document", "622", "--show"])
+        main(["--workspace", ws, "document", "622", "--show", "--no-provider"])
         body = capsys.readouterr().out
         assert "## Business rules" in body
         assert "may well exist" in body
@@ -588,7 +588,7 @@ class TestDocumentCommand:
         monkeypatch.setenv("CONSTAT_AI_PROVIDER", "openai")
         capsys.readouterr()
 
-        assert main(["--workspace", ws, "document", "622"]) == 5
+        assert main(["--workspace", ws, "document", "622", "--no-provider"]) == 5
         assert "does not implement" in capsys.readouterr().err
 
     def test_ticket_add_also_reports_the_rules_state(self, tmp_path, capsys):
@@ -601,7 +601,7 @@ class TestDocumentCommand:
         main(["--workspace", ws, "init"])
         capsys.readouterr()
 
-        assert main(["--workspace", ws, "ticket", "add", "900"]) == 0
+        assert main(["--workspace", ws, "ticket", "add", "900", "--no-provider"]) == 0
         assert "no rules identified" in capsys.readouterr().out
 
     def test_ticket_add_exits_five_on_a_provider_fault(
@@ -612,7 +612,7 @@ class TestDocumentCommand:
         monkeypatch.setenv("CONSTAT_AI_PROVIDER", "openai")
         capsys.readouterr()
 
-        assert main(["--workspace", ws, "ticket", "add", "901"]) == 5
+        assert main(["--workspace", ws, "ticket", "add", "901", "--no-provider"]) == 5
         assert "does not implement" in capsys.readouterr().err
 
     def test_the_credential_scan_reports_even_when_clean(self, tmp_path, capsys):
@@ -621,7 +621,7 @@ class TestDocumentCommand:
         ws = self._setup(tmp_path)
         capsys.readouterr()
 
-        assert main(["--workspace", ws, "document", "622"]) == 0
+        assert main(["--workspace", ws, "document", "622", "--no-provider"]) == 0
         out = capsys.readouterr().out
         assert "credential scan: no findings" in out
         assert "known formats only" in out
@@ -645,7 +645,7 @@ class TestDocumentCommand:
         git(clone, "commit", "-m", "Wire up the client (#622)")
         git(clone, "checkout", "--quiet", "main")
         main(["--workspace", ws, "repo", "add", str(clone), "--name", "billing"])
-        main(["--workspace", ws, "ticket", "add", "622"])
+        main(["--workspace", ws, "ticket", "add", "622", "--no-provider"])
         return ws
 
     def _configure_provider(self, monkeypatch):
@@ -664,7 +664,7 @@ class TestDocumentCommand:
         self._configure_provider(monkeypatch)
         capsys.readouterr()
 
-        assert main(["--workspace", ws, "document", "622"]) == 5
+        assert main(["--workspace", ws, "document", "622", "--no-provider"]) == 5
         err = capsys.readouterr().err
         assert "refusing to send" in err
         assert "a.py" in err
@@ -678,7 +678,7 @@ class TestDocumentCommand:
         self._configure_provider(monkeypatch)
         capsys.readouterr()
 
-        main(["--workspace", ws, "document", "622"])
+        main(["--workspace", ws, "document", "622", "--no-provider"])
         captured = capsys.readouterr()
         assert "AKIAIOSFODNN7EXAMPLE" not in captured.err
         assert "AKIAIOSFODNN7EXAMPLE" not in captured.out
@@ -703,7 +703,7 @@ class TestDocumentCommand:
         ws = self._setup_with_secret(tmp_path)
         capsys.readouterr()
 
-        assert main(["--workspace", ws, "document", "622"]) == 0
+        assert main(["--workspace", ws, "document", "622", "--no-provider"]) == 0
         out = capsys.readouterr().out
         assert "1 possible credential(s) found" in out
         assert "nothing was sent" in out

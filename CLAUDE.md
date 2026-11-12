@@ -64,8 +64,15 @@ record of why. Closing a ticket never deletes or supersedes a decision.
   checking applicable policies and permissions first.
 - **No deferred features sneaking in**: no web UI, hosted service, authentication, billing,
   Kubernetes, Kafka, graph database or multi-agent orchestration. See `PRODUCT_SPEC.md` § 6.2.
-- **Do not add an AI API dependency to the critical path.** The pipeline must work with no provider
-  configured.
+- **Do not add an AI API dependency to the critical path.** The evidence pipeline must work with no
+  provider configured, and `constat/ai/providers/` must stay an optional extra.
+  **Amended 2026-11-12 (D-059):** the *commands that generate rules* — `document` and `ticket add`
+  — now refuse with exit 5 when no provider is configured, because reporting "no rules were
+  identified" to someone who ran the command to get rules is accurate and useless. The guarantee is
+  unchanged underneath: `--no-provider` gathers evidence and nothing else, `operations.gather` still
+  runs with the null provider, and the MCP server needs no provider at all because the host
+  supplies the model (D-045). What changed is that the user says it out loud instead of discovering
+  it from a line of output.
 
 ## Product rules you are expected to defend
 

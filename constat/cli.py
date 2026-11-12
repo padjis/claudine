@@ -17,6 +17,7 @@ from .config import build_request, build_snapshot_request
 from .errors import (
     InvalidInput,
     ProviderError,
+    ProviderRequired,
     PublishError,
     RepositoryError,
     WorkspaceError,
@@ -32,7 +33,9 @@ from .store import (
     Workspace,
     database_path,
 )
+from .ai import NULL_PROVIDER_NAME, PROVIDER_ENV
 from .ai import as_dict as payload_as_dict
+from .ai import resolve as resolve_provider
 from .operations import export_payload, gather, publish_document, submit_reply
 from .publish import GitPages
 from .tickets import TicketStatus, find_ticket_commits
@@ -212,6 +215,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     document.add_argument(
+        "--no-provider",
+        action="store_true",
+        help=(
+            "gather the evidence and nothing else. Without this, a command "
+            "that would propose no rules because no provider is configured "
+            "is refused rather than quietly reporting none (D-059)."
+        ),
+    )
+    document.add_argument(
         "--show", action="store_true", help="print the document body"
     )
     document.add_argument(
@@ -284,6 +296,15 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "as on `document`: send the evidence despite credential-scan "
             "findings. `ticket add` gathers, so it can be refused too."
+        ),
+    )
+    ticket_add.add_argument(
+        "--no-provider",
+        action="store_true",
+        help=(
+            "open the ticket and gather its evidence without proposing rules. "
+            "`ticket add` gathers, so it is refused without a provider for the "
+            "same reason `document` is (D-059)."
         ),
     )
 
@@ -717,6 +738,42 @@ def _run_mcp(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _refuse_without_a_provider(args: argparse.Namespace) -> None:
+    """Refuse a rule-generating command when nothing can read the evidence.
+
+    D-059. `gather` itself still runs with no provider — the library keeps the
+    guarantee D-003 asked for, and the MCP server depends on it, because there
+    the *host* supplies the model and Constat is correct to have none.
+
+    What changed is the command boundary. Someone running `constat document
+    622` is asking for a document with rules in it; answering "no rules were
+    identified, because none were looked for" is true and useless. The
+    refusal names the three ways to proceed rather than only objecting.
+
+    A misconfigured provider already raised before this existed
+    (`UnknownProvider`, `ProviderNotConfigured`). This covers the one case that
+    did not: nothing configured at all.
+    """
+    if getattr(args, "no_provider", False):
+        return
+
+    provider = resolve_provider()  # raises for a misconfigured one
+    if provider.name != NULL_PROVIDER_NAME:
+        return
+
+    raise ProviderRequired(
+        f"{PROVIDER_ENV} is not set, so nothing would read this ticket's "
+        "evidence and no rules would be proposed. Refusing rather than "
+        "writing a document that says no rules were identified, which is "
+        "true and not what you asked for.\n"
+        "  - set CONSTAT_AI_PROVIDER=anthropic (with ANTHROPIC_API_KEY) to "
+        "have Constat read it,\n"
+        "  - or read it yourself: `document <REF> --no-provider --payload` "
+        "then `rule submit`,\n"
+        "  - or pass --no-provider to gather the evidence and nothing else."
+    )
+
+
 def _run_publish(args: argparse.Namespace) -> int:
     """Publish a ticket's document, or say why nothing was published.
 
@@ -781,6 +838,7 @@ def _run_document(args: argparse.Namespace) -> int:
         return _run_export(args)
 
     try:
+        _refuse_without_a_provider(args)
         with Workspace.open(args.workspace) as workspace:
             result = gather(
                 workspace,
@@ -828,6 +886,11 @@ def _run_ticket(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
             tickets = TicketStore(workspace)
 
             if args.ticket_action == "add":
+                # Before the ticket exists. A refusal must leave nothing
+                # behind: an opened ticket with no evidence and no rules is
+                # worse than no ticket, because `ticket add` then refuses to
+                # open it again (D-059).
+                _refuse_without_a_provider(args)
                 entry = tickets.add(args.reference)
                 print(f"opened ticket: {entry.reference}")
 

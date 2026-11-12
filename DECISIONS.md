@@ -8,6 +8,49 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-059 · 2026-11-12 · A rule-generating command refuses when nothing can read the evidence
+
+**Amends D-003 and D-041 at the command boundary.** Neither is superseded: both remain true of the
+library, and the MCP server depends on them.
+
+**Decision.** `constat document <REF>` and `constat ticket add <REF>` **refuse with exit 5** when
+`CONSTAT_AI_PROVIDER` is unset, naming the three ways to proceed. `--no-provider` gathers the
+evidence and nothing else, explicitly. `ProviderRequired` is the new error type.
+
+**Context.** D-041 established that a *misconfigured* provider must fail loudly rather than being
+downgraded to the null provider, and that has held: an unimplemented name and a missing credential
+both exit 5. The case it left succeeding was *nothing configured at all*, where the document said
+"no rules were identified — no AI provider is configured". Accurate, and useless to someone who ran
+the command in order to get rules. The complaint that produced this was exactly that: the step that
+should generate rules did not fail when it could not.
+
+**The tension, stated rather than glossed.** `CLAUDE.md` prohibits an AI dependency in the critical
+path and requires the pipeline to work with no provider configured. That requirement is kept, and
+is now something the user says out loud with `--no-provider` instead of something they discover
+from a line in the output. The guarantee was never that the *command* succeeds silently; it was
+that the evidence path does not need a provider, and it still does not.
+
+**Consequences.**
+
+- **The refusal is at the command boundary, not in `gather`.** `operations.gather` still runs with
+  the null provider and 77 library tests still call it that way, because they are about evidence.
+  Moving the refusal into `gather` would have made the library unusable without a key and broken
+  the MCP server, where having no provider is *correct*.
+- **MCP is deliberately exempt.** On that path the **host** supplies the model (D-045), so Constat
+  having no provider is the design rather than a misconfiguration. `gather_evidence` does not
+  refuse, and a test asserts it.
+- **`ticket add` checks before it creates the ticket.** A refusal that left an opened ticket with
+  no evidence would be worse than no ticket, because `ticket add` then refuses to open it again.
+- **The default changed, so a scripted `document` in anyone's pipeline starts failing.** Accepted
+  deliberately: a script that was quietly producing documents with no rules in them was not doing
+  what its author believed. The fix is one flag.
+- **`--no-provider` is not `--no-ai`.** It says "do not expect rules from this run", which is also
+  the honest way to run the export path: `document <REF> --no-provider --payload`.
+
+**Status.** accepted
+
+---
+
 ## D-058 · 2026-11-12 · A document is published through a port, and publishing is egress
 
 **Implements CON-57.** Amends `PRODUCT_SPEC.md` § 6.2 and `ARCHITECTURE.md` § 6, both of which

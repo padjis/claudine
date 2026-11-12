@@ -103,6 +103,8 @@ forces them.
 | CON-57 | A publishing port, and the default target | A document is published to the repository's page tool, through the credential gate. | ✅ D-058 |
 | CON-58 | Read decisions back, with provenance | A decision records its channel and how identity was established. | ⬜ **next** — the port's `read_decisions` raises `DecisionsNotReadable` until this lands |
 | CON-59 | Confluence, GitBook, GitLab docs backends | Each behind the same port, as optional extras. | ⬜ — the port exists; each backend is a `Target` implementation |
+| CON-62 | Gemini as a provider | `CONSTAT_AI_PROVIDER=gemini` proposes rules through the same `parse` and the same gates, as an optional extra. | ⬜ — CON-60 built the seam; this is a second `Provider` implementation |
+| CON-63 | ChatGPT as a provider | `CONSTAT_AI_PROVIDER=openai` likewise. The error D-041 raises for an unimplemented name currently names this one as the example. | ⬜ |
 | CON-61 | Read a frozen version's behaviours and anchors back | `rule history` can show what a version's behaviours and anchors were at the time it was accepted, not only its name and statement. | ⬜ — completes CON-14's recoverability criterion |
 | CON-29 | Ticket-scoped documentation (`constat document <ref>`) | A proposal can be initialised from a reference found in commit messages, across one or more repositories. | 🔁 **promoted** — now the primary workflow, delivered by CON-33/34 |
 | CON-39 | Regeneration must not destroy human input | Re-running an operation preserves every comment and decision, each still attached to what it was about. | ⬜ **blocks CON-47/48** — reframed by D-043: human *edits* no longer exist, so this is now about durable comment anchors. Decisions are already safe: CON-12 closed, and a decision is attached to a rule proposal rather than to document prose |
@@ -328,6 +330,26 @@ one asserting stdout stayed empty.
 
 **CON-49 was going to be the submit path too.** It split, because submitting needs somewhere to
 put a proposal and there is nowhere — see CON-51.
+
+### CON-62 / CON-63 — a second and third provider are small, and that is the test of the seam
+
+CON-60 built one provider against the `Provider` protocol and D-003's registry. Each further one
+should be a single module in `constat/ai/providers/`, an entry in `PROVIDERS` and `CREDENTIAL_ENV`,
+an optional extra in `pyproject.toml`, and nothing else. If either of these needs a change outside
+that list, the seam is wrong and the change belongs in the seam rather than in the provider.
+
+Specifically, neither may touch: `parse` (the reply contract and anchor grounding), `redact` (what
+crosses), `guard_release` (the credential gate), or `rule_proposal` storage. All four are shared,
+and a provider that needed its own version of one would be routing around a governance property.
+
+Two things to settle when the first of them lands:
+
+- **Whether the reply contract survives contact with a second model.** `SYSTEM` asks for JSON and
+  `parse` refuses anything else (D-046). A model that reliably wraps JSON in prose would make that
+  a provider-specific problem, which is the argument for structured outputs noted in D-057.
+- **What `model_attested` means for each** (D-057). It is true only where the response carries a
+  resolved model id. A provider whose API does not return one must record `None` and stay
+  unattested rather than echoing the requested name back as though it were established.
 
 ### CON-42 — the trust boundary first, the provider later
 

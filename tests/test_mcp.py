@@ -45,7 +45,7 @@ def home(tmp_path: Path) -> str:
     main(["--workspace", ws, "init"])
     clone = distinct_subject(tmp_path, "billing", "LIMIT = 250\n")
     main(["--workspace", ws, "repo", "add", str(clone), "--name", "billing"])
-    main(["--workspace", ws, "ticket", "add", "622"])
+    main(["--workspace", ws, "ticket", "add", "622", "--no-provider"])
     return ws
 
 
@@ -56,7 +56,7 @@ def leaky_home(tmp_path: Path) -> str:
     main(["--workspace", ws, "init"])
     clone = distinct_subject(tmp_path, "billing", f"K = '{AWS_KEY}'\n")
     main(["--workspace", ws, "repo", "add", str(clone), "--name", "billing"])
-    main(["--workspace", ws, "ticket", "add", "622"])
+    main(["--workspace", ws, "ticket", "add", "622", "--no-provider"])
     return ws
 
 
@@ -398,3 +398,37 @@ class TestThroughARealClient:
         text = " ".join(c.text for c in result.content if hasattr(c, "text"))
         assert "refusing to send" in text
         assert AWS_KEY not in text
+
+
+class TestMcpIsExemptFromTheProviderGate:
+    """D-059 exempts this path, and the exemption is the design (D-045).
+
+    On MCP the **host** supplies the model, so Constat having no provider is
+    correct rather than a misconfiguration. If `gather_evidence` refused the
+    way the CLI does, the entire intended workflow would stop working on a
+    machine with no API key — which is the machine it was designed for.
+    """
+
+    def test_gathering_works_with_no_provider_configured(self, home, monkeypatch):
+        monkeypatch.delenv("CONSTAT_AI_PROVIDER", raising=False)
+        result = json_of(call(home, "gather_evidence", reference="622"))
+
+        assert result["repositories_searched"] >= 1
+
+    def test_the_payload_is_readable_with_no_provider_configured(
+        self, home, monkeypatch
+    ):
+        """The whole point of the MCP path: the evidence goes out, the host's
+        model reads it, and Constat never needed a key."""
+        monkeypatch.delenv("CONSTAT_AI_PROVIDER", raising=False)
+        call(home, "gather_evidence", reference="622")
+        payload = json_of(call(home, "get_payload", reference="622"))
+
+        assert payload["reference"] == "622"
+
+    def test_no_tool_mentions_the_provider_gate(self):
+        """A `--no-provider` equivalent would be meaningless here, so there
+        must not be one to pass."""
+        from constat.mcp import EXPOSED_TOOLS
+
+        assert "no_provider" not in " ".join(EXPOSED_TOOLS)

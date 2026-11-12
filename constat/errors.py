@@ -66,6 +66,19 @@ class ProviderNotConfigured(ProviderError):
     """
 
 
+class ProviderRequired(ProviderError):
+    """A rule-generating command was run with no provider configured (D-059).
+
+    Distinct from `ProviderNotConfigured`, which means a provider was *named*
+    and its credential is missing. This is the case where nothing was named at
+    all — which used to succeed and report that no rules were identified. True,
+    and useless to someone who ran the command in order to get rules.
+
+    The evidence path still works with no provider; `--no-provider` says so
+    explicitly, and saying it explicitly is the point.
+    """
+
+
 class MalformedResponse(ProviderError):
     """A provider's reply could not be parsed into proposals (CON-42).
 

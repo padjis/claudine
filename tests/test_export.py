@@ -236,7 +236,7 @@ class TestTheCommandLine:
         main(["--workspace", ws, "init"])
         clone = make_subject(tmp_path, "billing", content=content)
         main(["--workspace", ws, "repo", "add", str(clone), "--name", "billing"])
-        main(["--workspace", ws, "ticket", "add", "622"])
+        main(["--workspace", ws, "ticket", "add", "622", "--no-provider"])
         return ws
 
     def test_payload_prints_json_on_stdout(self, tmp_path, capsys):
@@ -246,7 +246,7 @@ class TestTheCommandLine:
         ws = self._setup(tmp_path)
         capsys.readouterr()
 
-        assert main(["--workspace", ws, "document", "622", "--payload"]) == 0
+        assert main(["--workspace", ws, "document", "622", "--payload", "--no-provider"]) == 0
         parsed = json.loads(capsys.readouterr().out)
         assert parsed["reference"] == "622"
 
@@ -256,7 +256,7 @@ class TestTheCommandLine:
         ws = self._setup(tmp_path, content=f"K = '{AWS_KEY}'\n")
         capsys.readouterr()
 
-        assert main(["--workspace", ws, "document", "622", "--payload"]) == 5
+        assert main(["--workspace", ws, "document", "622", "--payload", "--no-provider"]) == 5
         captured = capsys.readouterr()
         assert "refusing to send" in captured.err
         assert AWS_KEY not in captured.err
@@ -285,7 +285,7 @@ class TestTheCommandLine:
         ws = self._setup(tmp_path)
         capsys.readouterr()
 
-        assert main(["--workspace", ws, "document", "622", "--payload", "--show"]) == 2
+        assert main(["--workspace", ws, "document", "622", "--payload", "--show", "--no-provider"]) == 2
         assert "pick one" in capsys.readouterr().err
 
     def test_the_export_leaves_the_document_untouched(self, tmp_path, capsys):
@@ -300,12 +300,12 @@ class TestTheCommandLine:
 
         def body() -> str:
             capsys.readouterr()
-            main(["--workspace", ws, "document", "622", "--show"])
+            main(["--workspace", ws, "document", "622", "--show", "--no-provider"])
             return capsys.readouterr().out
 
         before = body()
         assert "rules.py" in before  # the document really does have content
 
         capsys.readouterr()
-        main(["--workspace", ws, "document", "622", "--payload"])
+        main(["--workspace", ws, "document", "622", "--payload", "--no-provider"])
         assert body() == before
