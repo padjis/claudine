@@ -100,7 +100,18 @@ freezes a version. The draft carries no authority — only a frozen version is p
 ### 6.2 Out of scope for the MVP
 
 Web dashboard · multi-tenant SaaS · authentication · billing · Kubernetes · Kafka · graph database ·
-multi-agent workflows · automatic approval · writing to GitHub · any required AI API call.
+multi-agent workflows · automatic approval · any required AI API call.
+
+~~writing to GitHub~~ **Amended 2026-11-12 (D-058):** publishing a document to a documentation
+target is **in scope**. The reason it was deferred was that writing anywhere outside the workspace
+is a new class of risk; the reason it cannot stay deferred is product rule 8. Constat has to be
+useful to a business audience, and that audience does not read a terminal or a SQLite file. A rule
+catalogue nobody but the author can see fails the rule it was built to satisfy.
+
+The amendment is narrow. What is published is a **document** — the rendered business and evidence
+view for one ticket. Constat still never writes to a subject repository, never pushes code, never
+comments on a pull request, and never modifies anything it reads. Automatic approval stays out of
+scope, and publishing a document is not approving anything in it.
 
 AI is behind a provider interface and is **optional**. The first prototype must produce a useful
 report with no AI provider configured at all, to avoid recurring API costs before the workflow is

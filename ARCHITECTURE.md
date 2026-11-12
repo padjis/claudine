@@ -34,7 +34,7 @@ rules structurally enforced rather than merely intended.
 flowchart TD
     CLI["CLI — thin: parse, validate, dispatch, render"]
     MCP["MCP server — stdio, optional extra, four tools"]
-    OPS["operations.py — collect, gather, export, submit, render"]
+    OPS["operations.py — collect, gather, export, submit, render, publish"]
 
     subgraph DET["Deterministic — no provider or network needed"]
         GIT["git/ — read-only subprocess, revisions, diffs"]
@@ -48,13 +48,17 @@ flowchart TD
         PROV["ai/provider.py + providers/ — the seam, opt-in (D-003, D-057)"]
     end
 
+    subgraph OUT["Egress — every exit is gated by the same scanner"]
+        PUB["publish/ — the one write outside the workspace (D-058)"]
+    end
+
     subgraph GOV["Governance — a human is the only writer"]
         REV["store/acceptance.py — accept and reject"]
         CAT["store/catalogue.py — current rules"]
         PROP["store/proposals.py — rule proposals, append-only"]
     end
 
-    DB["SQLite — schema 6; triggers enforce append-only"]
+    DB["SQLite — schema 7; triggers enforce append-only"]
 
     CLI --> OPS
     MCP --> OPS
@@ -66,6 +70,8 @@ flowchart TD
     OPS --> PARSE
     OPS --> PROV
     OPS --> PROP
+    OPS -->|"publish only"| PUB
+    PUB --> SCAN
     REV --> CAT
     REV --> PROP
     PROP --> DB
@@ -93,9 +99,10 @@ Each layer may depend only on layers above it in that list. In particular:
 
 ## 2.1 The workflow, driven from an AI implementation
 
-This is the intended path (D-045). The **host supplies the model** — Constat never calls one, and
-has no API key. Constat runs as a subprocess the client spawns over stdio; nothing listens on a
-port.
+This is the intended path (D-045). On it the **host supplies the model**, so Constat calls nothing
+and needs no API key: it runs as a subprocess the client spawns over stdio, and nothing listens on
+a port. Constat *can* call a model itself when `CONSTAT_AI_PROVIDER` is set (D-057), which is the
+other path and not this one.
 
 ```mermaid
 sequenceDiagram
@@ -105,6 +112,7 @@ sequenceDiagram
     participant Constat as constat mcp
     participant Repos as Repositories
     participant Store as Workspace
+    participant Pages as Documentation target
 
     Dev->>Host: work out what ticket 622 changed
     Host->>Constat: spawn on stdio, initialise, list tools
@@ -135,6 +143,12 @@ sequenceDiagram
     Dev->>Constat: rule accept 1 --by you
     Constat->>Store: baseline a frozen rule version
     Note over Dev,Store: the CLI is the only door to this step
+
+    Dev->>Constat: publish 622
+    Constat->>Store: read the stored document, then scan it
+    Constat->>Pages: clone, write the page, commit, push
+    Constat->>Store: record the publication as an operation
+    Note over Constat,Pages: a credential refuses before anything is cloned
 ```
 
 ### Where the model lives, and where the wall is
@@ -177,6 +191,13 @@ client and no `rule submit` (D-057). It changes nothing about the wall: the payl
 redacted, credential-scanned payload, and acceptance is still only reachable from the CLI. Three
 things stay true whichever path is used — identity never crosses (D-040), egress goes through
 `guard_release` (D-047), and with no provider configured the evidence pipeline runs in full.
+
+**There are three egress points, and one scanner.** `document --payload`, the MCP `get_payload`,
+and `constat publish` all leave the machine, and all three go through the detectors in
+`ai/scanning.py` — `guard_release` for a payload, `guard_publication` for a rendered document.
+Publishing is the one that cannot be recalled: a payload reaches a provider under contract, while a
+page can reach everyone with access to the wiki, and deleting it afterwards does not unpublish it.
+That is why it refuses by default and why the override is recorded (D-058).
 
 ### The same loop without an agent
 
@@ -227,6 +248,10 @@ constat/
     settings.py       # provider resolution from the environment only (D-041)
     providers/
       anthropic.py    # the one real provider, optional extra (D-057)
+  publish/
+    port.py           # the Target protocol and PublishedRef (D-058)
+    targets/
+      git_pages.py    # the default target: a git-backed docs repository
   store/
     schema.py         # schema 7 + migrations + append-only triggers
     workspace.py      # connection, versioning, transactions
@@ -284,7 +309,12 @@ test exists for each.
 
 ## 6. Security posture
 
-- Read-only against Git and GitHub. No writes, no commits, no pushes, no PR comments in the MVP.
+- **Read-only against every repository Constat reads.** No writes, no commits, no pushes and no PR
+  comments to a subject repository, ever. Gathering evidence cannot change what it is evidence of.
+- **One write path exists, and it is opt-in:** publishing a document to a documentation target
+  (D-058). It writes a Markdown page to a target named explicitly or derived from the repository's
+  remote, and nothing else. It never touches the subject repository's branches or history, and it
+  is reached only by `constat publish`, never by `gather`.
 - Credentials come from the environment or an OS keychain — **never** from files in this repository.
   GitHub access starts with least-privilege, read-only scope on **one** repository.
 - `.gitignore` must cover the local database, reports and any `.env`.

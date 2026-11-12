@@ -28,7 +28,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from ..errors import PayloadRefused
+from ..errors import PayloadRefused, PublicationRefused
 from .redaction import ProviderPayload
 
 COMMIT_MESSAGE = "(commit message)"
@@ -291,3 +291,66 @@ def refusal_message(findings: tuple[SecretFinding, ...]) -> str:
         "rotate it, or re-run with --accept-scan-findings to send anyway — which is "
         "recorded in the document as a human decision."
     )
+
+
+@dataclass(frozen=True)
+class DocumentFinding:
+    """A credential-shaped string in a rendered document. Never the secret.
+
+    Separate from `SecretFinding` rather than reusing it with placeholders: a
+    document has no repository alias and no commit sha, and a finding that
+    printed empty ones would send a reader looking in the wrong place. The
+    *detection* is shared — both go through `_scan_line`, which is the part
+    that must never be re-derived (the CON-49 lesson).
+    """
+
+    line: int
+    detector: str
+
+    def describe(self) -> str:
+        return f"line {self.line} — {self.detector}"
+
+
+def scan_document(body: str) -> tuple[DocumentFinding, ...]:
+    """Every credential-shaped string in a rendered document.
+
+    A document is not a payload, but it is built from one: commit subjects and
+    diff excerpts both reach it. Scanning the rendered text rather than the
+    payload it came from is deliberate — the document is what gets published,
+    and a gate that checks a different artefact than the one leaving is
+    checking the wrong thing.
+    """
+    findings: list[DocumentFinding] = []
+    for number, line in enumerate(body.splitlines(), start=1):
+        for detector in sorted(_scan_line(line)):
+            findings.append(DocumentFinding(number, detector))
+    return tuple(findings)
+
+
+def guard_publication(
+    body: str, *, accepted: bool = False
+) -> tuple[DocumentFinding, ...]:
+    """Scan a document, and refuse to publish unless a human accepted it.
+
+    The third entry point to this scanner, after the provider path (D-044) and
+    the export path (D-047). Publishing deserves the gate most: a payload sent
+    to a provider at worst reaches a company under contract, while a published
+    page can put a credential on a wiki the whole organisation reads, and
+    deleting the page afterwards does not unpublish it.
+
+    Raises `PublicationRefused` rather than returning a flag, for the reason
+    `guard_release` does: a caller who forgets to check a boolean still
+    publishes.
+    """
+    findings = scan_document(body)
+    if findings and not accepted:
+        locations = "\n".join(f"  - {finding.describe()}" for finding in findings)
+        raise PublicationRefused(
+            f"refusing to publish this document: {len(findings)} possible "
+            f"credential(s) found in it.\n{locations}\n"
+            "Nothing has been published. A published page cannot be recalled, "
+            "so this refuses by default. Remove the credential from the "
+            "evidence and rotate it, then re-gather. To publish anyway, and "
+            "on the record, pass --accept-scan-findings."
+        )
+    return findings

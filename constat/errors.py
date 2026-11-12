@@ -96,6 +96,59 @@ class PayloadRefused(ProviderError):
     """
 
 
+class PublishError(ConstatError):
+    """A document could not be published (CON-57).
+
+    Its own family rather than a WorkspaceError or a RepositoryError: the
+    workspace is fine and the repository is fine. What failed is the attempt
+    to put a document somewhere outside both of them.
+    """
+
+
+class TargetUnknown(PublishError):
+    """No publication target was given and none could be derived.
+
+    Refused rather than guessed. The same posture as DefaultBranchUnknown
+    (D-028), and for a sharper reason: guessing a target wrong publishes a
+    team's business rules somewhere nobody expected (D-058).
+    """
+
+
+class PublicationRefused(PublishError):
+    """A document was not published because it contains a credential.
+
+    The published page is the one egress that cannot be recalled, so the gate
+    here is the same scanner that guards the provider path (D-047, D-058).
+    """
+
+
+class PublishFailed(PublishError):
+    """The write to the target did not complete.
+
+    Raised rather than reported as a successful publication with no location.
+    A caller told a document was published, when it was not, will not look
+    again.
+    """
+
+
+class PublishRecordFailed(PublishError):
+    """The document was published, but recording the publication failed.
+
+    Its own type because the message has to say the opposite of every other
+    publish failure: something *did* leave the machine. A user who reads a
+    generic error as "nothing was published" will not go and delete the page
+    or rotate a key that reached it.
+    """
+
+
+class DecisionsNotReadable(PublishError):
+    """This target cannot yet report decisions made in it (CON-58).
+
+    An error rather than an empty result: returning no decisions would read as
+    "nobody has decided", which is the substitution D-041 refuses.
+    """
+
+
 class RepositoryError(ConstatError):
     """The repository or a revision within it could not be read.
 

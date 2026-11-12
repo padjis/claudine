@@ -100,9 +100,9 @@ forces them.
 | --- | --- | --- | --- |
 | CON-56 | Render from stored state | The document shows the catalogue and the review queue, not just the current run. | ✅ D-056 |
 | CON-60 | The first real provider | `CONSTAT_AI_PROVIDER=anthropic` makes `ticket add` fill the review queue with no `rule submit` step, and the recorded model id is the one the API returned. | ✅ D-057 — also closes CON-42 |
-| CON-57 | A publishing port, and the default target | A document is published to the repository's page tool, through the credential gate. | ⬜ needs CON-60 — publishing a document with no rules in it publishes an empty page |
-| CON-58 | Read decisions back, with provenance | A decision records its channel and how identity was established. | ⬜ needs CON-57 |
-| CON-59 | Confluence, GitBook, GitLab docs backends | Each behind the same port, as optional extras. | ⬜ needs CON-57 |
+| CON-57 | A publishing port, and the default target | A document is published to the repository's page tool, through the credential gate. | ✅ D-058 |
+| CON-58 | Read decisions back, with provenance | A decision records its channel and how identity was established. | ⬜ **next** — the port's `read_decisions` raises `DecisionsNotReadable` until this lands |
+| CON-59 | Confluence, GitBook, GitLab docs backends | Each behind the same port, as optional extras. | ⬜ — the port exists; each backend is a `Target` implementation |
 | CON-61 | Read a frozen version's behaviours and anchors back | `rule history` can show what a version's behaviours and anchors were at the time it was accepted, not only its name and statement. | ⬜ — completes CON-14's recoverability criterion |
 | CON-29 | Ticket-scoped documentation (`constat document <ref>`) | A proposal can be initialised from a reference found in commit messages, across one or more repositories. | 🔁 **promoted** — now the primary workflow, delivered by CON-33/34 |
 | CON-39 | Regeneration must not destroy human input | Re-running an operation preserves every comment and decision, each still attached to what it was about. | ⬜ **blocks CON-47/48** — reframed by D-043: human *edits* no longer exist, so this is now about durable comment anchors. Decisions are already safe: CON-12 closed, and a decision is attached to a rule proposal rather than to document prose |

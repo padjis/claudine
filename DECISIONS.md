@@ -8,6 +8,61 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-058 · 2026-11-12 · A document is published through a port, and publishing is egress
+
+**Implements CON-57.** Amends `PRODUCT_SPEC.md` § 6.2 and `ARCHITECTURE.md` § 6, both of which
+asserted that Constat never writes outside its workspace.
+
+**Decision.** `constat publish <REF>` writes the stored document to a documentation target.
+
+1. **A `Target` port, not a GitHub client.** `publish/port.py` declares `publish(reference, body)
+   -> PublishedRef` and `read_decisions(ref)`. Confluence, GitBook and GitLab docs arrive behind
+   the same protocol as optional extras (CON-59). Only `publish` is implemented here;
+   `read_decisions` raises `DecisionsNotReadable` until CON-58, because a port whose second half
+   silently returns nothing would read as "nobody has decided".
+2. **The default target is derived from the repository's remote, and never guessed.**
+   `remote_url()` joins `resolve_default_branch()` as the second read-only fact taken from a remote.
+   A recognised host maps to its wiki; an unrecognised one **refuses** and asks for `--target`, the
+   same posture D-028 took for the default branch. A wrong guess here publishes a team's business
+   rules somewhere nobody expected.
+3. **Publishing goes through the credential gate.** `guard_publication` is a second entry point to
+   the scanner that already guards the provider and export paths (D-047), sharing `_scan_line`
+   rather than re-deriving detection. A document carries commit subjects and diff excerpts, and a
+   published page is the one egress that cannot be recalled: the model path at worst sends a
+   credential to a provider under contract, while this one can put it on a wiki the whole company
+   reads.
+4. **Each publication is a `run` and an `operation`** of kind `publish_document`, so where a
+   document went is attributable (D-029, D-049) — recorded *after* the write succeeds, because an
+   operation row for a publication that failed is a false record of disclosure.
+
+**Context.** Everything until now lived in a local SQLite file, and rules were accepted in a
+terminal. Product rule 8 requires serving a business audience, and that audience is not in a
+terminal. The gap was found by asking where acceptance was expected to happen and discovering the
+answer was nowhere.
+
+**Consequences.**
+
+- **Constat stores no credential for this.** Git's own authentication applies — SSH agent, or a
+  credential helper the user already configured — and `run_git` inherits the environment. Nothing
+  is written to a file in this repository, and no new secret-bearing config exists.
+- **The subject repository is still read-only.** Publishing writes to a documentation target, never
+  to the repository the evidence came from. `gather` cannot reach this code at all.
+- **Publishing is explicit.** There is no `--publish` flag on `gather` and no automatic publication
+  on acceptance. A document leaves the machine when someone runs one command that does nothing
+  else, because "it published when I didn't expect it to" is unrecoverable.
+- **A published page is a proposal, not an approval** (product rule 4). The page carries the review
+  queue as an inert task list and says so, exactly as the pull-request body does (D-056). Reading
+  ticks back is CON-58, and when it lands it is the *unverified* channel.
+- **Overwriting a page is the normal case**, and it is the right one: a document is a living view
+  of one ticket. The durable record is the workspace, where `document_version` is append-only. The
+  page is a view, which is D-004 applied one layer out.
+- **`run_git` now runs write commands.** It did not before. Writes are confined to a clone Constat
+  made itself in a temporary directory, so a failure cannot leave a user's working tree dirty.
+
+**Status.** accepted
+
+---
+
 ## D-057 · 2026-11-12 · The first real provider, and a model id Constat resolved itself
 
 **Implements CON-60.** `CONSTAT_AI_PROVIDER=anthropic` makes `constat ticket add 622` read its own

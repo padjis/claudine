@@ -196,6 +196,20 @@ def local_branches(repo: Repository) -> tuple[str, ...]:
     return tuple(sorted(line.strip() for line in result.stdout.split("\n") if line.strip()))
 
 
+def remote_url(repo: Repository, remote: str = "origin") -> str | None:
+    """The configured URL of a remote, or None if it has none.
+
+    The second read-only fact Constat takes from a remote, after
+    `resolve_default_branch`. Returns None rather than raising: a repository
+    with no remote is perfectly valid and simply has no derivable publication
+    target, which is the caller's decision to report (D-058).
+    """
+    result = run_git(["remote", "get-url", remote], cwd=repo.root)
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
+
+
 def resolve_default_branch(repo: Repository, remote: str = "origin") -> str:
     """The repository's default branch, resolved authoritatively or not at all.
 

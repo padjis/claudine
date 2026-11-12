@@ -17,6 +17,8 @@ point of provenance (product rule 3).
 
 from __future__ import annotations
 
+import json
+
 from dataclasses import dataclass, field
 
 from .ai import (
@@ -34,6 +36,10 @@ from .ai import (
     scan,
 )
 from .ai import resolve as resolve_provider
+from .ai.scanning import DocumentFinding, guard_publication
+from .errors import PublishRecordFailed
+from .publish import PublishedRef, Target
+from .publish.targets.git_pages import detect as git_pages_detect
 from .errors import PayloadRefused, RepositoryError
 from .evidence import DEFAULT_LIMITS, EvidenceBundle, ExcerptLimits, collect_evidence
 from .git.adapter import Repository, Revision, discover_repository, resolve_revision
@@ -936,3 +942,113 @@ def gather(
         scan_accepted=accepted,
         run_id=run_id,
     )
+
+
+@dataclass(frozen=True)
+class PublishResult:
+    """What a publication did, including what it was allowed to carry."""
+
+    ref: PublishedRef
+    run_id: int
+    scan_findings: tuple[DocumentFinding, ...] = ()
+    scan_accepted: bool = False
+
+
+def publish_document(
+    workspace: Workspace,
+    reference: str,
+    target: Target | None = None,
+    *,
+    repository: str | None = None,
+    accept_scan_findings: bool = False,
+) -> PublishResult:
+    """Publish a ticket's stored document to a documentation target (D-058).
+
+    The one path in Constat that writes outside the workspace, and the only
+    one reached by its own command. `gather` cannot publish and acceptance
+    does not publish, because "it published when I did not expect it to" is
+    not recoverable by apologising.
+
+    **It publishes what is stored, and renders nothing.** The body comes from
+    the `document` row, so what lands on the page is what `document --show`
+    shows. Re-rendering here would let a published page differ from the one a
+    reviewer was shown, and D-056 made the document a function of stored state
+    precisely so those two cannot diverge.
+
+    **The gate runs before the target is touched.** A refusal must leave
+    nothing behind — no clone, no commit, no partial page — so the scan
+    happens first and `PublicationRefused` is raised before anything is
+    written.
+
+    **The operation is recorded after the write succeeds.** An operation row
+    for a publication that failed would claim a disclosure that never
+    happened, which is worse than no record at all.
+    """
+    body = TicketStore(workspace).document(reference).body
+
+    # First, and before any target exists: a refusal has to leave the world
+    # untouched (D-047, D-058).
+    scan_findings = guard_publication(body, accepted=accept_scan_findings)
+
+    if target is None:
+        target = detect_target(repository)
+
+    ref = target.publish(reference, body)
+
+    accepted = bool(scan_findings) and accept_scan_findings
+    try:
+        run_id = open_run(workspace, reference, "publish_document")
+        document_id = _document_id(workspace, reference)
+        with workspace.transaction() as ws:
+            ws.execute(
+                "INSERT INTO operation "
+                "(document_id, run_id, repository_id, kind, ran_at, summary, payload) "
+                "VALUES (?, ?, NULL, 'publish_document', ?, ?, ?)",
+                (
+                    document_id,
+                    run_id,
+                    utc_now(),
+                    ref.describe(),
+                    json.dumps(
+                        {
+                            "target": ref.target,
+                            "location": ref.location,
+                            "revision": ref.revision,
+                            "characters": len(body),
+                            "scan_findings": len(scan_findings),
+                            "scan_accepted": accepted,
+                        }
+                    ),
+                ),
+            )
+    except Exception as exc:  # noqa: BLE001 - the write already happened
+        # The document is published. Nothing can un-publish it, so the one
+        # thing this must not do is fail in a way that reads as "nothing left
+        # the machine" — a user who believes that will not rotate a key or
+        # delete a page. Found by a real failure: a missing import crashed
+        # here *after* a successful push, and the traceback sat on top of a
+        # page that was already live.
+        raise PublishRecordFailed(
+            f"the document WAS published to {ref.describe()}, but recording "
+            f"the publication in the workspace failed: {exc}. The page is "
+            "live; only Constat's own record of it is missing, so `ticket "
+            "show` will not list this publication."
+        ) from exc
+
+    return PublishResult(
+        ref=ref,
+        run_id=run_id,
+        scan_findings=scan_findings,
+        scan_accepted=accepted,
+    )
+
+
+def detect_target(repository: str | None = None) -> Target:
+    """Derive the default target from a repository's remote, or refuse.
+
+    `repository` defaults to the working directory, which is what "the page
+    tool of the current repository" means in practice: the document may span
+    several registered repositories, so no one of them is the obvious anchor,
+    while the repository someone is standing in is unambiguous.
+    """
+    return git_pages_detect(discover_repository(repository or "."))

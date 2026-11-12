@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-12
 **Current phase:** Phase 3 — Meaning and reporting (reshaped by D-035 … D-039)
-**Current session:** CON-57 — a publishing port (CON-09, CON-56, CON-60/CON-42 closed)
+**Current session:** CON-58 — read decisions back (CON-09, CON-56, CON-57, CON-60/CON-42 closed)
 
 ---
 
@@ -32,6 +32,12 @@ at CON-43. Auditing CON-14 found a real gap rather than only a stale label: `rul
 and `rule_version_anchor` are written and frozen by trigger, but **no code path reads them**, so a
 version's behaviours and anchors as they stood at acceptance are in the database and unreachable.
 Raised as **CON-61**.
+
+**A document can now leave the machine.** `constat publish <REF>` writes the stored document to a
+documentation target — by default the wiki of the current repository's remote, derived and never
+guessed. It is the only command that writes outside the workspace; `gather` cannot publish and
+accepting does not. Three egress points now exist (`document --payload`, MCP `get_payload`,
+`publish`) and all three go through the same credential detectors.
 
 **With no provider configured the evidence path still runs in full**, and the document says no
 rules were *identified* rather than implying none exist (D-041). That is the default: a fresh
@@ -355,6 +361,90 @@ other backends).
 
 Still standing: validation is at **zero discovery conversations** (CON-26), and `tryconstat.com`
 is unregistered (CON-21).
+
+---
+
+## CON-57 — done when: *a document is published through the credential gate* ✅
+
+`constat publish <REF>` writes a ticket's stored document to a documentation target. `D-058`
+records the decision; `PRODUCT_SPEC.md` § 6.2 and `ARCHITECTURE.md` § 6 both had to be amended
+first, because both asserted Constat never writes outside its workspace.
+
+### What changed
+
+| File | Change |
+| --- | --- |
+| `constat/publish/port.py` | **new** — the `Target` protocol, `PublishedRef`, and `NotYetReadable` for targets that cannot yet read decisions back. |
+| `constat/publish/targets/git_pages.py` | **new** — the default target. Clones, writes `<REF>.md`, commits, pushes. Derives the wiki URL from the remote by host, or refuses. |
+| `constat/ai/scanning.py` | `scan_document` and `guard_publication` — a third entry point sharing `_scan_line`, plus `DocumentFinding`. |
+| `constat/git/adapter.py` | `remote_url()`, beside `resolve_default_branch`. Returns None rather than raising: a repository with no remote is valid. |
+| `constat/operations.py` | `publish_document()`, `detect_target()`, `PublishResult`. |
+| `constat/errors.py` | `PublishError` and five subtypes, including `PublishRecordFailed`. |
+| `constat/cli.py` | `constat publish`, exit code **6**. |
+
+### Tests — actually run
+
+`.venv/bin/python -m pytest` → **779 passed** in 124s (from 747). `tests/test_publishing.py` is
+new: 32 tests, against a real bare repository over `file://`. No network and no credential; the
+assertions are against what landed in the target rather than a mock's call log, because a mock
+would happily record a push git would have rejected.
+
+Mutation-checked, seven mutations, each caught by the test that names the property:
+
+| Mutation | Caught by |
+| --- | --- |
+| The credential gate is skipped | `test_a_credential_in_the_document_refuses` + 3 |
+| An unknown host falls back to GitHub's convention | `test_an_unknown_host_refuses` |
+| A missing remote is guessed at | `test_a_repository_with_no_remote_refuses` |
+| The operation is recorded before the write | `test_the_page_is_written_and_committed` + 2 |
+| A reference is used as a path unsanitised | `test_a_reference_cannot_escape_the_page_directory` |
+| `read_decisions` returns nothing instead of raising | `test_a_target_cannot_report_decisions_yet` |
+| The temporary clone is left behind | `test_publishing_leaves_no_temporary_clone_behind` + 1 |
+
+### Two things found by running it rather than by reasoning
+
+- **A crash after a successful push.** A missing `import json` made the operation recording fail
+  *after* the page was live, so the user saw a traceback over a published document. Fixed, and the
+  recording is now wrapped: a failure there raises `PublishRecordFailed`, whose message says the
+  document **was** published. Every other failure says "nothing has been published", and a user
+  who cannot tell the difference has to assume the worst — which for a document carrying a
+  credential is the difference between rotating a key and not.
+- **An empty repository publishes fine.** A test was written expecting it to fail with "the wiki
+  has never been created". Git clones an empty repository, commits on an unborn branch and pushes,
+  so Constat makes the first commit — which is the right behaviour. The error message said
+  something untrue and was corrected; the test now asserts the success, and a separate test covers
+  the genuinely missing repository.
+
+### Verified by hand
+
+Against the rewound clone of this repository used for CON-60, publishing to a local bare repo:
+the page landed with the right content and commit subject; republishing unchanged content made no
+second commit; a credential in the body refused with exit 6 and left the wiki untouched; a
+repository with no remote and one on `git.internal.example` both refused with exit 6. Detection
+against this repository's own remote yields
+`https://github.com/padjis/constat.wiki.git (derived from origin (github.com))`.
+
+### Known issues and what was left undone
+
+- **Only `git-pages` exists.** Confluence, GitBook and GitLab docs are CON-59, behind the same
+  port. The port's shape is therefore informed by exactly one implementation.
+- **`read_decisions` raises on every target.** Acceptance is still CLI-only, which is half of what
+  the original question asked for. CON-58.
+- **No real hosted wiki has been published to.** Every test and every manual check used a local
+  bare repository over `file://`. Authentication, the `.wiki.git` convention on a real GitHub repo,
+  and push permissions are untested against a real host.
+- **Nothing reads the publication record.** The `publish_document` operation rows exist and no
+  command shows them, so "where has this document been published" is not answerable yet — the same
+  shape of gap as CON-61.
+- **The diagrams are unverified.** `ARCHITECTURE.md` § 2 and § 2.1 both changed and I cannot
+  render mermaid here. Two earlier attempts at diagram edits in this repository broke rendering, so
+  these need a look in GitHub's preview before being trusted.
+
+### Next smallest task
+
+**CON-58** — read decisions back with their channel and verification, as planned. Still true and
+still more valuable first: configure a key and run one real ticket through the provider, because
+publishing documents built on unvalidated readings bakes in whatever the prompt gets wrong.
 
 ---
 

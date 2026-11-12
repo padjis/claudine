@@ -14,7 +14,13 @@ from pathlib import Path
 
 from . import __version__
 from .config import build_request, build_snapshot_request
-from .errors import InvalidInput, ProviderError, RepositoryError, WorkspaceError
+from .errors import (
+    InvalidInput,
+    ProviderError,
+    PublishError,
+    RepositoryError,
+    WorkspaceError,
+)
 from .evidence import collect_evidence, describe_commit
 from .mapping import change_proposal, commit_record, state_proposal
 from .store import (
@@ -27,7 +33,8 @@ from .store import (
     database_path,
 )
 from .ai import as_dict as payload_as_dict
-from .operations import export_payload, gather, submit_reply
+from .operations import export_payload, gather, publish_document, submit_reply
+from .publish import GitPages
 from .tickets import TicketStatus, find_ticket_commits
 from .git import (
     compare_revisions,
@@ -52,6 +59,7 @@ EXIT_USAGE = 2  # argparse's own convention for a usage error; reused for bad in
 EXIT_REPOSITORY = 3  # the input was fine; the repository or revision was not.
 EXIT_WORKSPACE = 4  # Constat's own stored state could not be opened or created.
 EXIT_PROVIDER = 5  # the interpretation layer was misconfigured; nothing else was.
+EXIT_PUBLISH = 6  # the document is fine; publishing it did not happen (D-058).
 
 
 def _describe_repository(repo) -> None:
@@ -214,6 +222,46 @@ def build_parser() -> argparse.ArgumentParser:
             "Constat to read. Identity never crosses this boundary (D-040), "
             "and the credential scan refuses unconditionally here — unlike a "
             "local run, an export has left by the time it has printed."
+        ),
+    )
+
+    publish = subparsers.add_parser(
+        "publish",
+        help="publish a ticket's document to a documentation target",
+        description=(
+            "Write the ticket's stored document to a documentation target, so "
+            "the people who decide about a rule can read it where they work. "
+            "This is the only command that writes outside the workspace: "
+            "gathering never publishes, and accepting never publishes. What "
+            "lands on the page is exactly what `document --show` prints — "
+            "nothing is re-rendered here. Publishing a document approves "
+            "nothing in it."
+        ),
+    )
+    publish.add_argument("reference", metavar="REF")
+    publish.add_argument(
+        "--target",
+        default=None,
+        metavar="URL",
+        help=(
+            "the documentation repository to publish to. Omit it to derive the "
+            "target from the current repository's remote; an unrecognised host "
+            "is refused rather than guessed at."
+        ),
+    )
+    publish.add_argument(
+        "--repository",
+        default=None,
+        metavar="PATH",
+        help="the repository whose remote names the target (default: the working directory)",
+    )
+    publish.add_argument(
+        "--accept-scan-findings",
+        action="store_true",
+        help=(
+            "publish even though the credential scan found something in the "
+            "document. Recorded as an operation. A published page cannot be "
+            "recalled, so this is never the default."
         ),
     )
 
@@ -669,6 +717,57 @@ def _run_mcp(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _run_publish(args: argparse.Namespace) -> int:
+    """Publish a ticket's document, or say why nothing was published.
+
+    Every failure path here prints "nothing has been published" rather than a
+    bare error. A user who cannot tell whether a document left the machine has
+    to assume it did, and for a document that may carry a credential that is
+    the difference between rotating a key and not.
+    """
+    try:
+        with Workspace.open(args.workspace) as workspace:
+            target = None
+            if args.target is not None:
+                target = GitPages(args.target)
+
+            result = publish_document(
+                workspace,
+                args.reference,
+                target,
+                repository=args.repository,
+                accept_scan_findings=args.accept_scan_findings,
+            )
+    except PublishError as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_PUBLISH
+    except ProviderError as exc:
+        # A credential found in the document. Its own exit code so a script can
+        # tell "refused to publish" from "could not reach the target".
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_PUBLISH
+    except RepositoryError as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_REPOSITORY
+    except WorkspaceError as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_WORKSPACE
+
+    print(f"published:  {result.ref.describe()}")
+    print(f"run:        {result.run_id}")
+    if result.scan_accepted:
+        print(
+            f"\n{len(result.scan_findings)} credential scan finding(s) were "
+            "accepted and published anyway. Recorded as an operation. If any "
+            "is real, rotate it — the page is readable now."
+        )
+    print(
+        "\nThe page is a proposal, not an approval. Its review queue records "
+        "nothing: accept or reject with `constat rule accept <ID> --by <who>`."
+    )
+    return EXIT_OK
+
+
 def _run_document(args: argparse.Namespace) -> int:
     if args.payload and args.show:
         print(
@@ -1004,6 +1103,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "rule":
         return _run_rule(args, parser)
+
+    if args.command == "publish":
+        return _run_publish(args)
 
     if args.command == "analyse":
         return _run_analyse(args)
