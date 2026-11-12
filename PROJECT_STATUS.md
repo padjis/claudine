@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-12
 **Current phase:** Phase 3 — Meaning and reporting (reshaped by D-035 … D-039)
-**Current session:** CON-50 — MCP server, pending agreement (CON-55 closed)
+**Current session:** CON-26 — discovery conversations (CON-50 closed)
 
 ---
 
@@ -324,31 +324,78 @@ $ constat --nope           → error: unrecognized arguments: --nope   (exit 2)
 
 ## Next single task
 
-**CON-50 — the MCP server**, which needs agreeing before it is built: `CLAUDE.md` requires
-agreement for new infrastructure, and D-045 assumed stdio rather than a listening HTTP service.
+**CON-26 — hold the first discovery conversations.** Not code, and now the thing most clearly
+blocking everything else.
 
-The workflow is otherwise complete end to end:
+The workflow is complete. An MCP client can drive it end to end, a human accepts at the CLI, and
+history is traceable from a rule back to the diff it came from. What has never happened is anyone
+outside this repository looking at the output.
 
 ```
-constat document 622 --payload          # evidence + catalogue out, through the gate
-<any model, anywhere>                   # may claim `revises: <rule_id>`
-constat rule submit 622 --from -        # grounded, stored, discards and overlaps reported
+constat mcp                             # an agent drives the loop over stdio
 constat rule proposals 622              # the review queue
-constat rule accept 1 --by emmanuel     # baselines a frozen version
-constat rule history 1                  # the chain back to the evidence
+constat rule accept 1 --by emmanuel     # a human decides; no tool can
+constat rule history 1                  # back to the reading, the run, the evidence
 ```
 
-What is still missing, in rough order of value:
+If more code is wanted first, in order of value:
 
 1. **Comments** (CON-39, CON-47, CON-48). D-043 made the body AI-written and comments the only way
-   a human amends it — none of that exists. CON-39's narrowed form is that comments attach only to
-   durable identities, which rule proposals and rule versions now have.
-2. **The document does not show accepted rules** (CON-09). The body reflects the run that wrote it,
-   so the catalogue and the review queue are invisible there.
-3. **A real provider or MCP host.** Everything works today with a reply pasted in by hand.
+   a human amends it, and none of it exists. CON-39's narrowed form — comments attach only to
+   durable identities — is now easy, because rule proposals and rule versions have them.
+2. **The document shows nothing of the catalogue** (CON-09). The body reflects the run that wrote
+   it, so accepted rules and the review queue are invisible there.
+3. **CON-21** — `tryconstat.com` is still unregistered while the name sits in a public repository.
 
-Still standing: validation is at **zero discovery conversations** (CON-26), and `tryconstat.com`
-is still unregistered (CON-21) while the name sits in a public repository.
+---
+
+## CON-50 — done when: *an MCP client can drive the loop; acceptance is never exposed* ✅
+
+| Item | Status |
+| --- | --- |
+| `constat/mcp.py`, `constat mcp` — stdio transport | ✅ D-055 |
+| Four tools: gather, payload, submit, list queue | ✅ |
+| **No `accept` or `reject` tool**, asserted on the live tool list | ✅ the point of the ticket |
+| The `mcp` SDK is an optional extra | ✅ D-003's promise holds |
+| No tool reimplements an operation | ✅ gates hold by construction |
+| Constat's errors keep their message through `ToolError` | ✅ |
+| Instructions tell the model nothing it submits is accepted | ✅ |
+| Verified through a real client over stdio | ✅ not only in process |
+
+### Tests run
+
+```
+.venv/bin/python -m pytest  →  697 passed in 69.30s
+```
+
+22 new tests. The existing 675 needed no changes.
+
+### Mutation-checked
+
+| Regression | Result |
+| --- | --- |
+| Expose an `accept_rule_proposal` tool "for convenience" | **3 tests failed** |
+| Let a `ConstatError` escape instead of becoming a `ToolError` | **4 tests failed** |
+
+### The test that matters asserts an absence
+
+A model that could call `accept` would make "no proposal becomes official without an explicit human
+decision" unenforceable — not by malice, but because the tool would be there. An absence is the
+easiest property to lose, so the tool list is checked against the **live server** rather than by
+reading the source: a tool added by a decorator anywhere shows up.
+
+### A wrapper that lost the reason
+
+Letting a `ConstatError` escape gets it wrapped as an unexpected crash, and a client sees "Error
+executing tool get_payload" with the refusal gone. `ToolError` — the SDK's "a failure you
+anticipated" — keeps the message, which for this product is the part worth sending: *remove the
+credential and rotate it*.
+
+### Two things the SDK taught me rather than my memory
+
+`mcp` 2.x renamed `FastMCP` to `MCPServer`, and the client-side `CallToolResult` field is
+`is_error`, not `isError`. Both found by running it against a real client — which is the argument
+for that end-to-end test existing rather than trusting the in-process shortcut.
 
 ---
 

@@ -109,7 +109,7 @@ forces them.
 | CON-53 | Withdraw the manual rule commands | `rule add` / `behaviour` / `anchor` / `remove` are gone, and a trigger aborts `DELETE ON rule`. | ✅ D-048 — landed with CON-51 |
 | CON-52 | Submit a reply from outside | A reply produced anywhere becomes grounded, stored rule proposals via the CLI. | ✅ D-052 — `rule submit`, `rule proposals` |
 | CON-55 | Propose a revision, not just a new rule | A reading can claim to revise a rule it was shown; overlap warns without deciding. | ✅ D-054 |
-| CON-50 | MCP server | An MCP client can gather evidence, read the payload and submit proposals; approval is never exposed as a tool. | ⬜ D-045 — needs agreement before building (new infrastructure) |
+| CON-50 | MCP server | An MCP client can gather evidence, read the payload and submit rule proposals; acceptance is never exposed as a tool. | ✅ D-055 — `constat mcp`, stdio, optional extra |
 | CON-45 | Secret scanning before the payload leaves | A payload containing a credential is refused rather than sent. | ✅ D-044 |
 | CON-47 | Document comments | A comment is stored, attributed and anchored to a durable identity; the body stays machine-written. | ⬜ D-043 — needs CON-39's anchor model |
 | CON-48 | Comments reach the interpretation pass | Commenting changes the next draft. | ⬜ D-043 — without it, commenting is a suggestion box |
@@ -166,6 +166,32 @@ address, because dropping a diff line would misstate the change.
 payload — roughly 47,000 tokens, for one ticket in one repository. D-039 called the cost real; this
 is the number. CON-42 should treat payload size as a design constraint rather than discover it on a
 bill.
+
+### CON-50 — four tools, and the fifth one must never exist
+
+Done. `constat mcp` serves `gather_evidence`, `get_payload`, `submit_rules` and
+`list_rule_proposals` on stdio (D-055). The `mcp` SDK is an optional extra, so a CLI user carries
+no protocol library they never run and D-003's promise holds.
+
+**The important test asserts an absence.** There is no `accept` tool, because a model that could
+call one would make "no proposal becomes official without an explicit human decision"
+unenforceable. The tool list is checked against the *live* server rather than the source, so a tool
+added by a decorator anywhere shows up. Mutation-checked: adding an `accept_rule_proposal` tool
+fails 3 tests.
+
+**No tool reimplements an operation**, so the gates hold by construction — `get_payload` *is*
+`export_payload`, which is why a credential refuses through MCP as readily as through the CLI.
+Verified through a real client over stdio, not just in process.
+
+**A wrapper that lost the reason.** Letting a `ConstatError` escape gets it wrapped as an
+unexpected crash, and the client sees "Error executing tool get_payload" with the refusal gone.
+`ToolError` — the SDK's "a failure you anticipated" — keeps the message, which for this product is
+the part worth sending: "remove the credential and rotate it". Mutation-checked: letting it escape
+fails 4 tests.
+
+Two small things the SDK taught me rather than my memory: `mcp` 2.x renamed `FastMCP` to
+`MCPServer`, and a client-side `CallToolResult` field is `is_error`, not `isError`. Both found by
+running it, which is the argument for the end-to-end test existing at all.
 
 ### CON-55 — the missing input was the catalogue
 

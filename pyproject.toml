@@ -27,7 +27,11 @@ dependencies = ["pydantic>=2.7"]
 dynamic = ["version"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "mcp>=2"]
+# The MCP server is opt-in: `pip install constat[mcp]`. A CLI user should not
+# carry a protocol library they never run, and the evidence pipeline must keep
+# working with nothing but pydantic installed (D-003).
+mcp = ["mcp>=2"]
 
 [project.scripts]
 constat = "constat.cli:main"

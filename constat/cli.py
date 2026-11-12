@@ -274,6 +274,18 @@ def build_parser() -> argparse.ArgumentParser:
     repo_remove.add_argument("name", metavar="ALIAS")
 
     subparsers.add_parser(
+        "mcp",
+        help="run as an MCP server on stdio",
+        description=(
+            "Expose gathering, the payload, submission and the review queue to "
+            "an MCP client over stdio. Acceptance is deliberately not exposed: "
+            "a model that could accept would make 'no proposal becomes official "
+            "without an explicit human decision' unenforceable. Nothing listens "
+            "on a port."
+        ),
+    )
+
+    subparsers.add_parser(
         "init",
         help="create a workspace",
         description=(
@@ -639,6 +651,21 @@ def _print_interpretation(interpretation) -> None:
         print("  (that is a statement about configuration, not about the code)")
 
 
+def _run_mcp(args: argparse.Namespace) -> int:
+    try:
+        from .mcp import serve
+    except ImportError:
+        print(
+            f"{PROG}: error: the MCP server needs an optional dependency. "
+            "Install it with `pip install constat[mcp]`.",
+            file=sys.stderr,
+        )
+        return EXIT_USAGE
+
+    serve(args.workspace)
+    return EXIT_OK
+
+
 def _run_document(args: argparse.Namespace) -> int:
     if args.payload and args.show:
         print(
@@ -956,6 +983,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command is None:
         parser.print_help()
         return EXIT_OK
+
+    if args.command == "mcp":
+        return _run_mcp(args)
 
     if args.command == "init":
         return _run_init(args)

@@ -8,6 +8,48 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-055 · 2026-11-12 · The MCP server exposes four tools, and acceptance is not one of them
+
+**Implements D-045.** `constat mcp` runs an MCP server on **stdio**.
+
+**Decision.** Four tools: `gather_evidence`, `get_payload`, `submit_rules`,
+`list_rule_proposals`. **There is no `accept` or `reject` tool**, and the tool list is asserted in
+a test so the absence cannot be lost quietly.
+
+The `mcp` SDK is an **optional extra** (`pip install constat[mcp]`), not a runtime dependency.
+
+**Context.** `CLAUDE.md` prohibits marking a proposal approved without a recorded human decision,
+and product rule 4 makes generated content a proposal rather than knowledge. A model that could
+call `accept` would make both unenforceable — not by malice, but because the tool would be there.
+Acceptance therefore stays a human act at the CLI, outside the agent's reach.
+
+**Consequences.**
+
+- **An absence is the easiest property to lose**, so it is tested on the *live* tool list rather
+  than by reading the source. A tool added by a decorator anywhere shows up there.
+- **Stdio, not HTTP.** The client spawns Constat as a subprocess and nothing listens on a port,
+  which is what keeps this a local tool rather than the hosted service `PRODUCT_SPEC.md` § 6.2
+  defers — and means no authentication layer, which § 6.2 also defers.
+- **No tool reimplements an operation.** Every one calls the same function the CLI does, so the
+  gates hold by construction: identity never crosses (D-040), the credential gate fires on
+  `get_payload` because that *is* `export_payload` (D-047), and a submitted reading is grounded
+  against re-gathered evidence (D-052). Tested through a real client, not only in process.
+- **Constat's errors become `ToolError`, deliberately.** That is the SDK's "a failure you
+  anticipated", and it keeps the message. Letting a `ConstatError` escape gets it wrapped as an
+  unexpected crash and the client sees only "Error executing tool get_payload" — losing "remove
+  the credential and rotate it", which is the only part worth sending.
+- **The optional extra keeps the promise in D-003**: the evidence pipeline runs with nothing but
+  pydantic installed, and a CLI user carries no protocol library they never run.
+- **The server tells the model its output is provisional.** The instructions say nothing submitted
+  is accepted and that no tool here can accept — a model that believes otherwise will present a
+  reading as settled.
+- The workspace is opened per call rather than held for the session: a session outlives any one
+  operation, and a long-lived connection to a governance store is a lock waiting to be contended.
+
+**Status.** accepted
+
+---
+
 ## D-054 · 2026-11-12 · A reading may claim to revise a rule it was shown
 
 **Closes the finding half of CON-43.**
