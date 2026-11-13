@@ -31,6 +31,7 @@ from collections.abc import Callable, Mapping
 
 from ...errors import ProviderFailed
 from ..parsing import parse
+from ..guidance import for_system_prompt
 from ..provider import Interpretation
 from ..redaction import ProviderPayload, as_dict
 
@@ -46,35 +47,15 @@ MAX_TOKENS = 16_000
 """Headroom for adaptive thinking plus the reply. The reply itself is small;
 the thinking is not, and a truncated reply would arrive as invalid JSON."""
 
-SYSTEM = """\
-You are reading the evidence for one software ticket and identifying the \
-business rules it touches. Business rules, not implementation details: a rule \
-is something a person in the business could agree or disagree with, stated \
-without reference to code.
+SYSTEM = for_system_prompt()
+"""The provider's system message.
 
-You are given the changed files and commit subjects for one ticket, and the \
-rules already in the catalogue. Identify only rules the evidence supports. \
-`unknown` is an acceptable answer: returning no rules is correct when the \
-change carries no business meaning, and is far better than a plausible guess.
-
-Every anchor must name a path that appears in the evidence you were given. An \
-anchor is where a rule lives, not a claim that its behaviour changed.
-
-If a rule you identify is a revision of one already in the catalogue, set \
-`revises` to that rule's id rather than proposing it again.
-
-Reply with JSON and nothing else, in exactly this shape:
-
-{"rules": [{"name": "kebab-case-name",
-            "statement": "One sentence a business reader would recognise.",
-            "behaviours": ["What the system does"],
-            "anchors": [{"path_glob": "path/from/the/evidence.py",
-                         "repository_alias": "alias"}],
-            "revises": 3}]}
-
-`revises` is optional; omit it for a new rule. Return {"rules": []} if the \
-evidence supports none.
+Shared with the MCP prompt through `ai.guidance`, so a rule proposed over MCP
+and the same rule proposed here mean the same thing. Two prose blocks
+maintained in parallel would drift, and the catalogue would become a record of
+which path happened to be configured (CON-66).
 """
+
 
 Transport = Callable[[str, str], tuple[str, str]]
 """`(model, payload_json) -> (reply_text, resolved_model)`.

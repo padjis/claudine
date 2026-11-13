@@ -104,6 +104,8 @@ forces them.
 | CON-58 | Read decisions back, with provenance | A decision records its channel and how identity was established. | ⬜ **next** — the port's `read_decisions` raises `DecisionsNotReadable` until this lands |
 | CON-59 | Confluence, GitBook, GitLab docs backends | Each behind the same port, as optional extras. | ⬜ — the port exists; each backend is a `Target` implementation |
 | CON-65 | Who reads the evidence is a workspace setting | `ticket add` needs no flag on an MCP workspace; `init --reader` and `config reader` set it. | ✅ D-060 |
+| CON-66 | MCP prompts, so the loop is one command | `/mcp__constat__document <REF>` runs the whole loop; the rule-writing guidance is shared with the provider path. | ✅ |
+| CON-67 | A rule has a title and details, and details are tracked across versions | `rule history` shows which details were added, removed, edited or unchanged between versions. | ⬜ — needs CON-61, and a decision on detail identity |
 | CON-64 | An agent can open a ticket | The MCP workflow starts from the agent: `gather_evidence` on an unknown reference opens the ticket rather than failing. | ⬜ — today the agent cannot start, and `ticket add` at the CLI is a required first step nobody expects |
 | CON-62 | Gemini as a provider | `CONSTAT_AI_PROVIDER=gemini` proposes rules through the same `parse` and the same gates, as an optional extra. | ⬜ — CON-60 built the seam; this is a second `Provider` implementation |
 | CON-63 | ChatGPT as a provider | `CONSTAT_AI_PROVIDER=openai` likewise. The error D-041 raises for an unimplemented name currently names this one as the example. | ⬜ |
@@ -332,6 +334,36 @@ one asserting stdout stayed empty.
 
 **CON-49 was going to be the submit path too.** It split, because submitting needs somewhere to
 put a proposal and there is nowhere — see CON-51.
+
+### CON-67 — title, details, and what "edited" means
+
+Stated as an expectation: a rule has a **title** summarising what it is about, and **details** that
+characterise it. Across iterations a detail may be added, removed, edited or left unchanged.
+
+Most of this exists under different names. `Rule.statement` is the title — "one sentence a business
+reader would recognise" — and `behaviours` are the details. `name` is a kebab-case identifier and
+not a title; D-050 already settled that identity is the surrogate id, so `name` is a label. The
+vocabulary should move to `title` and `details`, because the current words invite the wrong
+reading: a *behaviour* sounds like something the system does, which is what made D-035 necessary.
+
+The tracking half does not exist, but the data does. `rule_version_behaviour` freezes every
+version's details already — nothing reads it, which is CON-61. CON-61 plus a diff gives added,
+removed and unchanged for free.
+
+**"Edited" is the part that needs a decision.** A detail is a string today, so if version 1 says
+"Refuse above the limit" and version 2 says "Refuse above the daily limit", nothing can tell an
+edit from a removal plus an addition. Reporting it as an edit would be a guess, and this project
+does not guess (product rule 1). Two honest options:
+
+- **Give a detail a surrogate id that survives across versions**, as D-050 did one level up for
+  rules. A reading then says which detail it is revising, and the answer is recorded rather than
+  inferred. Costs: the reply contract grows, and a model has to be shown the current details with
+  their ids.
+- **Report only added, removed and unchanged.** Truthful, cheaper, and an edit shows up as one of
+  each — which a reader can see for themselves, side by side.
+
+The second is the smaller honest answer and the first is the better one. Worth deciding
+deliberately rather than by whichever is easier to implement.
 
 ### CON-64 — the MCP workflow cannot start from the agent
 

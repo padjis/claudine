@@ -30,6 +30,13 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .ai.guidance import (
+    ANCHORS,
+    NOTHING_IS_ACCEPTED,
+    REPLY_SHAPE,
+    REVISION,
+    WHAT_A_RULE_IS,
+)
 from .ai import as_dict
 from .errors import ConstatError
 from .operations import export_payload, gather, submit_reply
@@ -229,6 +236,77 @@ def build_server(workspace_home: str | None = None):
 
         return _anticipated(run)
 
+    @server.prompt(
+        name="document",
+        title="Document a ticket",
+        description=(
+            "Read a ticket's evidence and propose the business rules it "
+            "changed. Gathers, reads the redacted payload, and stores what you "
+            "conclude as proposals. Nothing is accepted — a person decides at "
+            "the command line."
+        ),
+    )
+    def document_prompt(reference: str) -> str:
+        """The whole loop, as one invocation.
+
+        A tool is something the model chooses to call; a prompt is something
+        the *user* invokes, and clients surface it as a slash command. Until
+        this existed, starting the loop meant describing it in a sentence
+        every time — friction with no principle behind it, because an MCP
+        server cannot initiate anything on its own.
+
+        It is also where the MCP path finally gets what the provider path has
+        in `SYSTEM`. Tool descriptions can say what a tool does; they are a
+        poor place to explain what a business rule is, and nothing else here
+        was saying it.
+        """
+        return (
+            f"Work out what ticket {reference} changed, and propose the "
+            "business rules it touches.\n\n"
+            f"1. Call `gather_evidence` with reference `{reference}`. Report "
+            "every repository it searched, including the ones that "
+            "contributed nothing — silence about a repository is not the same "
+            "as no changes there.\n"
+            f"2. Call `get_payload` with reference `{reference}` and read it.\n"
+            f"3. Call `submit_rules` with reference `{reference}` and your "
+            "conclusions as JSON.\n"
+            "4. Tell me what was stored and what was discarded, with the "
+            "reasons.\n\n"
+            f"{WHAT_A_RULE_IS}\n\n{ANCHORS}\n\n{REVISION}\n\n"
+            f"{NOTHING_IS_ACCEPTED}\n\n"
+            "The reply for step 3 is JSON in this shape:\n\n"
+            f"{REPLY_SHAPE}\n\n"
+            "If a refusal comes back — a credential in the evidence, an "
+            "ungrounded anchor — tell me what it said rather than working "
+            "around it. Those refusals are the product working."
+        )
+
+    @server.prompt(
+        name="review",
+        title="Review a ticket's rule proposals",
+        description=(
+            "Summarise what is waiting for a decision on a ticket, so a "
+            "person can decide. Read-only: accepting is not possible here."
+        ),
+    )
+    def review_prompt(reference: str) -> str:
+        """Read the queue and explain it. Deliberately cannot decide."""
+        return (
+            f"Call `list_rule_proposals` with reference `{reference}` and "
+            "summarise what is waiting for a decision.\n\n"
+            "For each one, say what the rule claims, where it is anchored, "
+            "and whether it claims to revise an existing rule. Note which "
+            "readings are self-reported — the model named in a proposal is "
+            "what the reader claimed, not something Constat established, "
+            "unless it says otherwise.\n\n"
+            "An empty queue means nothing has read this ticket's evidence "
+            "yet. It is not a statement that the ticket has no rules.\n\n"
+            "Do not recommend accepting or rejecting anything, and do not "
+            "describe any of them as approved. You cannot accept — there is "
+            "no tool for it here by design. Finish by telling me the command: "
+            "`constat rule accept <ID> --by <who>`."
+        )
+
     return server
 
 
@@ -240,6 +318,19 @@ EXPOSED_TOOLS = (
     "submit_rules",
     "list_rule_proposals",
 )
+
+EXPOSED_PROMPTS = ("document", "review")
+"""The prompts this server exposes, as slash commands in a client.
+
+A tool is something the model chooses to call; a prompt is something the user
+invokes. Until these existed, starting the loop meant typing a sentence every
+time — an MCP server cannot initiate anything, so the user has to, and making
+that one command rather than a paragraph is the whole of CON-66.
+
+Neither prompt may instruct acceptance. `review` says so explicitly, because
+the natural shape of "summarise what is waiting" is to end with a
+recommendation, and a recommendation from the thing that wrote the proposal is
+not a review."""
 
 FORBIDDEN_TOOLS = ("accept", "reject", "approve", "decide")
 """Never exposed. A model that could accept would make "no proposal becomes

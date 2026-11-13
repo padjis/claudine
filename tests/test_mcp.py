@@ -432,3 +432,98 @@ class TestMcpIsExemptFromTheProviderGate:
         from constat.mcp import EXPOSED_TOOLS
 
         assert "no_provider" not in " ".join(EXPOSED_TOOLS)
+
+
+class TestThePrompts:
+    """CON-66. A tool is what the model chooses to call; a prompt is what the
+    *user* invokes, and clients surface it as a slash command.
+
+    An MCP server cannot initiate anything — it only answers. So the user has
+    to start the loop, and before these existed that meant describing it in a
+    sentence every time. Friction with no principle behind it.
+    """
+
+    def prompts(self):
+        import asyncio
+
+        return asyncio.run(build_server("/tmp").list_prompts())
+
+    def rendered(self, name: str, reference: str = "622") -> str:
+        import asyncio
+
+        got = asyncio.run(
+            build_server("/tmp").get_prompt(name, {"reference": reference})
+        )
+        return got.messages[0].content.text
+
+    def test_the_prompt_list_is_what_it_claims(self):
+        """Asserted like the tool list, for the same reason: the shape of
+        these lists is the governance model, not an implementation detail."""
+        from constat.mcp import EXPOSED_PROMPTS
+
+        assert tuple(sorted(p.name for p in self.prompts())) == tuple(
+            sorted(EXPOSED_PROMPTS)
+        )
+
+    def test_each_takes_a_reference(self):
+        for prompt in self.prompts():
+            assert [a.name for a in prompt.arguments or []] == ["reference"]
+
+    def test_the_document_prompt_drives_the_whole_loop(self):
+        text = self.rendered("document")
+
+        for tool in ("gather_evidence", "get_payload", "submit_rules"):
+            assert tool in text
+        assert "622" in text
+
+    def test_it_carries_the_guidance_the_provider_path_has(self):
+        """The real gap this closed. Tool descriptions can say what a tool
+        does; they are a poor place to explain what a business rule is, and
+        nothing on the MCP path was explaining it at all."""
+        from constat.ai.guidance import WHAT_A_RULE_IS
+
+        assert WHAT_A_RULE_IS in self.rendered("document")
+
+    def test_the_guidance_is_shared_with_the_provider(self):
+        """A rule proposed over MCP and the same rule proposed by a provider
+        must mean the same thing, or the catalogue becomes a record of which
+        path happened to be configured."""
+        from constat.ai.guidance import ANCHORS, WHAT_A_RULE_IS
+        from constat.ai.providers.anthropic import SYSTEM
+
+        for shared in (WHAT_A_RULE_IS, ANCHORS):
+            assert shared in SYSTEM
+            assert shared in self.rendered("document")
+
+    def test_no_prompt_instructs_acceptance(self):
+        """D-055 reaches the prompts too. A model that could be *told* to
+        accept is only one missing tool away from accepting."""
+        from constat.mcp import FORBIDDEN_TOOLS
+
+        for prompt in self.prompts():
+            text = self.rendered(prompt.name).lower()
+            assert "nothing you propose is accepted" in text or "cannot accept" in text
+            for forbidden in FORBIDDEN_TOOLS:
+                assert f"call `{forbidden}" not in text
+
+    def test_the_review_prompt_refuses_to_recommend(self):
+        """The natural shape of "summarise what is waiting" is to end with a
+        recommendation, and a recommendation from the thing that wrote the
+        proposal is not a review."""
+        text = self.rendered("review")
+
+        assert "Do not recommend accepting or rejecting" in text
+        assert "constat rule accept" in text   # names the human's command
+
+    def test_the_review_prompt_keeps_the_empty_queue_honest(self):
+        text = self.rendered("review")
+        assert "not a statement that the ticket has no rules" in text
+
+    def test_the_document_prompt_does_not_route_around_refusals(self):
+        """A refusal is the product working. An agent told to "get it done"
+        would retry with --accept-scan-findings, which is the one thing that
+        must stay a human act."""
+        text = self.rendered("document")
+
+        assert "rather than working around it" in text
+        assert "accept-scan-findings" not in text
