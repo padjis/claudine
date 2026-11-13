@@ -14,6 +14,7 @@ from pathlib import Path
 
 from . import __version__
 from .config import build_request, build_snapshot_request
+from .git.adapter import configured_identity
 from .errors import (
     InvalidInput,
     ProviderError,
@@ -161,7 +162,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rule_accept.add_argument("proposal_id", metavar="ID", type=int)
     rule_accept.add_argument(
-        "--by", required=True, metavar="WHO", help="who is accepting"
+        "--by", default=None, metavar="WHO", help='who is deciding. Omitted, it is taken from your git identity (user.name and user.email) and recorded as inferred rather than stated — neither is verified, and a reviewer is entitled to know which (D-061).'
     )
     rule_accept.add_argument("--rationale", default=None)
 
@@ -176,7 +177,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rule_reject.add_argument("proposal_id", metavar="ID", type=int)
     rule_reject.add_argument(
-        "--by", required=True, metavar="WHO", help="who is rejecting"
+        "--by", default=None, metavar="WHO", help='who is deciding. Omitted, it is taken from your git identity (user.name and user.email) and recorded as inferred rather than stated — neither is verified, and a reviewer is entitled to know which (D-061).'
     )
     rule_reject.add_argument("--rationale", default=None)
 
@@ -541,6 +542,8 @@ def _report_proposals(proposals, reference: str, include_decided: bool) -> int:
         print(f"  [{item.id}] {item.proposal.name} — {state}")
         print(f"      {item.proposal.statement}")
         print(f"      read by {item.attribution}, run {item.run_id}")
+        if item.decided_by_description is not None:
+            print(f"      {item.decision} by {item.decided_by_description}")
         if item.claims_to_revise:
             print(f"      claims to revise rule {item.revises_rule_id}")
     return EXIT_OK
@@ -606,14 +609,20 @@ def _run_rule(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
                 return _report_submission(result)
 
             if args.rule_action == "accept":
+                decided_by, attribution = _decider(args)
                 result = Review(workspace).accept(
-                    args.proposal_id, decided_by=args.by, rationale=args.rationale
+                    args.proposal_id,
+                    decided_by=decided_by,
+                    rationale=args.rationale,
+                    attribution=attribution,
                 )
                 verb = "created" if result.created_rule else "revised"
                 print(
                     f"accepted: rule {result.rule_id} {verb}, "
                     f"version {result.version_no} baselined"
                 )
+                if attribution == "inferred":
+                    print(f"  recorded as: {decided_by} (inferred from git config)")
                 print()
                 print("The version is frozen and points back at the reading")
                 print("you accepted. See it with `constat rule history "
@@ -621,10 +630,16 @@ def _run_rule(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
                 return EXIT_OK
 
             if args.rule_action == "reject":
+                decided_by, attribution = _decider(args)
                 Review(workspace).reject(
-                    args.proposal_id, decided_by=args.by, rationale=args.rationale
+                    args.proposal_id,
+                    decided_by=decided_by,
+                    rationale=args.rationale,
+                    attribution=attribution,
                 )
                 print(f"rejected: rule proposal {args.proposal_id}")
+                if attribution == "inferred":
+                    print(f"  recorded as: {decided_by} (inferred from git config)")
                 print()
                 print("Recorded as inconclusive, not as wrong (D-036). The")
                 print("catalogue is unchanged and another reading is expected.")
@@ -638,6 +653,11 @@ def _run_rule(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
                 print(f"{len(versions)} version(s) of rule {args.rule_id}:")
                 for v in versions:
                     who = v["decided_by"] or "(unknown)"
+                    # The audit view is where this matters most: a name taken
+                    # from git config and a name a person typed are both
+                    # unverified, and only one of them was asserted (D-061).
+                    if v["attribution"] == "inferred":
+                        who += " (inferred from git config)"
                     print(f"  v{v['version_no']}  {v['name']}")
                     print(f"      {v['statement']}")
                     print(
@@ -659,6 +679,12 @@ def _run_rule(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
                 _print_rule(rule)
                 return EXIT_OK
 
+    except InvalidInput as exc:
+        # Reached when no --by was given and no identity could be inferred
+        # (D-061). A usage error: the command was well-formed, but it is
+        # missing the one thing a decision cannot be recorded without.
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
     except ProviderError as exc:
         # A reply that cannot be parsed is a provider fault, not a workspace
         # one, and must never read as "no rules were identified" (D-046).
@@ -830,6 +856,32 @@ def _refuse_without_a_provider(
         "  - or read it yourself: `document <REF> --no-provider --payload` "
         "then `rule submit`."
     )
+
+
+def _decider(args: argparse.Namespace) -> tuple[str, str]:
+    """Who is deciding, and how that name was obtained (D-061).
+
+    `--by` wins. Without it, git's configured identity is used and recorded as
+    `inferred`. Neither is verified — nothing here proves who ran the command —
+    so this is not a trust level; it is the difference between a name a person
+    asserted and a name a machine supplied.
+
+    With no git identity it refuses rather than falling back to `$USER` or the
+    OS login. Those name an account, not a person, and "who accepted this
+    rule" is the last question to answer with a guess.
+    """
+    if args.by is not None:
+        return args.by, "stated"
+
+    inferred = configured_identity()
+    if inferred is None:
+        raise InvalidInput(
+            "no --by was given and git has no configured identity to infer "
+            "one from, so there is nothing to record as the decider. Pass "
+            "--by, or set user.name and user.email in git. Refusing rather "
+            "than recording an account name: a decision needs a person."
+        )
+    return inferred, "inferred"
 
 
 def _run_config(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:

@@ -11,7 +11,7 @@ silently; a trigger cannot be bypassed by forgetting to call the right helper.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 SCHEMA = """
 -- Workspace settings: answers that belong to a setup rather than to a run.
@@ -171,11 +171,23 @@ CREATE TABLE rule_proposal_anchor (
 -- accepting or rejecting does not mutate it — the same shape `document_version`
 -- uses for documents (CON-31). `rejected` means inconclusive, not wrong
 -- (D-036), so a later reading of better evidence is expected.
+-- `attribution` says how `decided_by` was obtained: `stated` if a person
+-- typed it with --by, `inferred` if it came from git's configured identity.
+-- Neither is verified — nothing here proves who ran the command — so this is
+-- not a trust level. It is the difference between a name someone asserted and
+-- a name a machine supplied, and a reviewer weighing a decision is entitled to
+-- know which (product rule 3, D-061).
+--
+-- CON-58 adds `channel` and `verification` beside this. They answer different
+-- questions: `channel` is *where* the decision was made and `verification` is
+-- whether anything attested to it. `attribution` is finer than both and sits
+-- inside the CLI channel.
 CREATE TABLE rule_proposal_decision (
     id               INTEGER PRIMARY KEY,
     rule_proposal_id INTEGER NOT NULL REFERENCES rule_proposal(id),
     decision         TEXT    NOT NULL CHECK (decision IN ('accepted', 'rejected')),
     decided_by       TEXT    NOT NULL,
+    attribution      TEXT    NOT NULL DEFAULT 'stated',
     decided_at       TEXT    NOT NULL,
     rationale        TEXT
 );
@@ -525,6 +537,10 @@ MIGRATIONS: dict[int, tuple[str, ...]] = {
     # Existing workspaces are set to `provider`, which is exactly how they
     # behave today: a rule-generating command refuses without one. Defaulting
     # them to `mcp` would silently switch off a refusal someone is relying on.
+    8: (
+        "ALTER TABLE rule_proposal_decision"
+        " ADD COLUMN attribution TEXT NOT NULL DEFAULT 'stated'",
+    ),
     7: (
         "CREATE TABLE setting ("
         " key TEXT PRIMARY KEY,"

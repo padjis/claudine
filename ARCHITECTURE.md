@@ -58,7 +58,7 @@ flowchart TD
         PROP["store/proposals.py — rule proposals, append-only"]
     end
 
-    DB["SQLite — schema 8; triggers enforce append-only"]
+    DB["SQLite — schema 9; triggers enforce append-only"]
 
     CLI --> OPS
     MCP --> OPS
@@ -268,7 +268,7 @@ constat/
     targets/
       git_pages.py    # the default target: a git-backed docs repository
   store/
-    schema.py         # schema 8 + migrations + append-only triggers
+    schema.py         # schema 9 + migrations + append-only triggers
     settings.py       # workspace settings; the one table not append-only (D-060)
     workspace.py      # connection, versioning, transactions
     registry.py       # registered repositories (D-025, D-027, D-028)
@@ -322,6 +322,8 @@ test exists for each.
    rather than returning an interpretation with no proposals (D-041, D-057).
 10. A self-reported model id is never displayed as an established one. Only a reading Constat
     issued itself is shown without the caveat (D-057).
+11. Every stored decision names a decider, and records whether that name was stated by a person or
+    inferred from git's configured identity (D-061).
 
 ## 6. Security posture
 

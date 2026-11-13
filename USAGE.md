@@ -181,7 +181,11 @@ constat document 622 --show         # the document
 
 Three things that are not accidents:
 
-- **`--by` has no default.** A decision with no decider is not a decision.
+- **A decision always names someone.** `--by` is optional: omitted, the name comes from your git
+  identity and is recorded as *inferred* rather than *stated*. Neither is verified — nothing proves
+  who ran the command — so this is not a trust level, only the difference between a name a person
+  asserted and one a machine supplied. With no git identity at all, Constat refuses rather than
+  recording an account name.
 - **`rejected` means inconclusive, not wrong** (D-036). A later reading of better evidence is
   expected, not precluded.
 - **Accepting creates the rule.** Nothing else does — not gathering, not submitting, no MCP tool.

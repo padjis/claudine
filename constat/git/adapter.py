@@ -196,6 +196,38 @@ def local_branches(repo: Repository) -> tuple[str, ...]:
     return tuple(sorted(line.strip() for line in result.stdout.split("\n") if line.strip()))
 
 
+def configured_identity() -> str | None:
+    """The committer identity git would use here, or None if there is none.
+
+    Read from git's own configuration rather than from `$USER` or the OS
+    login: those name an *account*, and `padjis` is not who decided anything.
+    `user.name` and `user.email` are what this person already chose to be
+    called in a record of who did what, which is exactly the question being
+    asked (D-061).
+
+    Returns None rather than falling back. A machine with no git identity has
+    not told Constat who is using it, and inventing an answer to "who accepted
+    this rule" is the one place guessing is least acceptable.
+
+    **It depends on the working directory**, because git's own precedence does:
+    inside a repository with a local `user.name`, that wins over the global
+    one. That is the right answer rather than a quirk — it is exactly the name
+    git would put on a commit made here — but it does mean the same person can
+    be recorded under different names from different directories. The record
+    says the name was inferred, so a reviewer who sees two can tell why.
+    """
+    name = run_git(["config", "user.name"])
+    email = run_git(["config", "user.email"])
+    if name.returncode != 0:
+        return None
+
+    who = name.stdout.strip()
+    if not who:
+        return None
+    address = email.stdout.strip() if email.returncode == 0 else ""
+    return f"{who} <{address}>" if address else who
+
+
 def remote_url(repo: Repository, remote: str = "origin") -> str | None:
     """The configured URL of a remote, or None if it has none.
 

@@ -44,6 +44,7 @@ class StoredRuleProposal:
     revises_rule_id: int | None = None
     decision: str | None = None
     decided_by: str | None = None
+    decided_attribution: str | None = None
     decided_at: str | None = None
     rationale: str | None = None
 
@@ -57,7 +58,12 @@ class StoredRuleProposal:
 
     @property
     def attribution(self) -> str:
-        """Who read the evidence, and how firmly that is known (D-057).
+        """Who *read* the evidence, and how firmly that is known (D-057).
+
+        Distinct from `decided_attribution`, which is how the *decider's* name
+        was obtained (D-061). Two different people and two different
+        questions: one is the reader of the evidence, the other is the
+        authority over the result.
 
         One property rather than a string built at each display site: the
         document and the CLI both show this, and the caveat is the part that
@@ -66,6 +72,20 @@ class StoredRuleProposal:
         """
         reader = self.provider + (f" ({self.model})" if self.model else "")
         return reader if self.model_attested else f"{reader}, self-reported"
+
+    @property
+    def decided_by_description(self) -> str | None:
+        """Who decided, and how that name was obtained (D-061).
+
+        Neither `stated` nor `inferred` is verified — nothing proves who ran
+        the command. The difference is between a name a person asserted and a
+        name a machine supplied, and a reviewer is entitled to know which.
+        """
+        if self.decided_by is None:
+            return None
+        if self.decided_attribution == "inferred":
+            return f"{self.decided_by} (inferred from git config)"
+        return self.decided_by
 
     def describe(self) -> str:
         state = self.decision or "awaiting a decision"
@@ -147,6 +167,7 @@ class RuleProposals:
         decision: str,
         decided_by: str,
         rationale: str | None = None,
+        attribution: str = "stated",
     ) -> None:
         """Record a human's answer to one reading.
 
@@ -164,9 +185,16 @@ class RuleProposals:
         with self._workspace.transaction() as ws:
             ws.execute(
                 "INSERT INTO rule_proposal_decision "
-                "(rule_proposal_id, decision, decided_by, decided_at, rationale) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (proposal_id, decision, decided_by, utc_now(), rationale),
+                "(rule_proposal_id, decision, decided_by, attribution, "
+                " decided_at, rationale) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    proposal_id,
+                    decision,
+                    decided_by,
+                    attribution,
+                    utc_now(),
+                    rationale,
+                ),
             )
 
     def find(self, proposal_id: int) -> StoredRuleProposal | None:
@@ -246,7 +274,7 @@ class RuleProposals:
         # The latest decision wins for display; earlier ones remain in the
         # table, because changing one's mind is history rather than a mistake.
         decision = self._workspace.execute(
-            "SELECT decision, decided_by, decided_at, rationale "
+            "SELECT decision, decided_by, attribution, decided_at, rationale "
             "FROM rule_proposal_decision WHERE rule_proposal_id = ? "
             "ORDER BY id DESC LIMIT 1",
             (row["id"],),
@@ -268,6 +296,9 @@ class RuleProposals:
             revises_rule_id=row["revises_rule_id"],
             decision=None if decision is None else decision["decision"],
             decided_by=None if decision is None else decision["decided_by"],
+            decided_attribution=(
+                None if decision is None else decision["attribution"]
+            ),
             decided_at=None if decision is None else decision["decided_at"],
             rationale=None if decision is None else decision["rationale"],
         )

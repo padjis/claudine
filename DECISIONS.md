@@ -8,6 +8,47 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-061 · 2026-11-13 · The decider's name may be inferred, and the record says that it was
+
+**Decision.** `--by` is optional on `rule accept` and `rule reject`. Omitted, the decider is taken
+from git's configured identity and `rule_proposal_decision.attribution` records `inferred`;
+supplied, it records `stated` (schema 9). Every view that shows who decided shows which.
+
+**Context.** `--by` was mandatory with no default, on the reasoning that a decision with no decider
+is not a decision. That reasoning survives. What did not survive examination is the idea that
+typing a name made it *stronger*: `--by` is a free string nobody checks, so a typed name and a name
+read from git config are **equally unverified**. The mandatory flag bought friction, not
+assurance.
+
+**What this is not.** It is not a trust level, and `inferred` is not weaker than `stated`. Nothing
+here proves who ran the command — an agent with shell access can run either form. The distinction
+recorded is narrower and more honest: whether a person asserted this name or a machine supplied it.
+A reviewer reading a decision a year later is entitled to know which, and that is product rule 3
+applied to the decision itself rather than to the claim it approves.
+
+**Consequences.**
+
+- **git config, not `$USER` or the OS login.** Those name an *account*: `padjis` is not who decided
+  anything, while `user.name` is what this person already chose to be called in a record of who did
+  what. With no git identity configured, Constat **refuses** rather than falling back — "who
+  accepted this rule" is the last question to answer with a guess (D-028's posture).
+- **Existing decisions migrate to `stated`.** They were typed, so that is what happened.
+- **This is not CON-58's `channel` and `verification`, and must not be confused with them.**
+  `channel` will say *where* a decision was made — CLI, a forge approval, a page edit — and
+  `verification` whether anything attested to it. A forge approval is genuinely verified; nothing
+  on the CLI is. `attribution` is finer than both and sits inside the CLI channel.
+- **It does not make an MCP `accept` tool any more acceptable.** The objection there was never the
+  name: it is that the agent which wrote the proposal would be accepting its own proposal, and
+  inference does nothing about that. D-055 stands until a verified channel exists (CON-58).
+- **A naming collision was found and fixed while building this.** `StoredRuleProposal.attribution`
+  already meant who *read* the evidence (D-057). The decider's is `decided_attribution`. Two
+  different people and two different questions: the reader of the evidence, and the authority over
+  the result.
+
+**Status.** accepted
+
+---
+
 ## D-060 · 2026-11-13 · Who reads the evidence is a workspace setting, not a per-command flag
 
 **Amends D-059 one day later, after using it.** The refusal stays; the way it is answered changes.

@@ -53,6 +53,7 @@ class Review:
         proposal_id: int,
         decided_by: str,
         rationale: str | None = None,
+        attribution: str = "stated",
     ) -> Acceptance:
         """Accept a reading: record the decision and baseline a rule version."""
         stored = self._require(proposal_id)
@@ -64,7 +65,9 @@ class Review:
 
         rule_id, created = self._target_rule(stored)
         version_id, version_no = self._baseline(rule_id, stored)
-        self._proposals.decide(proposal_id, "accepted", decided_by, rationale)
+        self._proposals.decide(
+            proposal_id, "accepted", decided_by, rationale, attribution
+        )
         return Acceptance(
             rule_id=rule_id,
             rule_version_id=version_id,
@@ -77,6 +80,7 @@ class Review:
         proposal_id: int,
         decided_by: str,
         rationale: str | None = None,
+        attribution: str = "stated",
     ) -> None:
         """Reject a reading as inconclusive (D-036).
 
@@ -85,7 +89,9 @@ class Review:
         a later reading of better evidence is expected rather than precluded.
         """
         self._require(proposal_id)
-        self._proposals.decide(proposal_id, "rejected", decided_by, rationale)
+        self._proposals.decide(
+            proposal_id, "rejected", decided_by, rationale, attribution
+        )
 
     # -- internals ---------------------------------------------------------
 
@@ -197,7 +203,8 @@ class Review:
         """
         rows = self._workspace.execute(
             "SELECT v.id, v.version_no, v.name, v.statement, v.created_at, "
-            "       v.from_rule_proposal_id, d.decided_by, d.decided_at "
+            "       v.from_rule_proposal_id, d.decided_by, d.attribution, "
+            "       d.decided_at "
             "FROM rule_version v "
             "LEFT JOIN rule_proposal_decision d "
             "  ON d.rule_proposal_id = v.from_rule_proposal_id "

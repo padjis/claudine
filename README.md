@@ -91,7 +91,7 @@ constat repo add ~/git/billing --name billing
 constat ticket add 622            # gathers evidence across every registered repository
 #   …ask your agent to propose the rules this ticket changed…
 constat rule proposals 622        # what it proposed, awaiting your decision
-constat rule accept 1 --by you    # the only thing that creates a rule
+constat rule accept 1             # the only thing that creates a rule
 constat publish 622               # to the repository's wiki, through the credential gate
 ```
 

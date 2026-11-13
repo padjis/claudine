@@ -105,6 +105,7 @@ forces them.
 | CON-59 | Confluence, GitBook, GitLab docs backends | Each behind the same port, as optional extras. | ⬜ — the port exists; each backend is a `Target` implementation |
 | CON-65 | Who reads the evidence is a workspace setting | `ticket add` needs no flag on an MCP workspace; `init --reader` and `config reader` set it. | ✅ D-060 |
 | CON-66 | MCP prompts, so the loop is one command | `/mcp__constat__document <REF>` runs the whole loop; the rule-writing guidance is shared with the provider path. | ✅ |
+| CON-68 | Infer the decider from git config | `rule accept` needs no `--by`; the record says whether the name was stated or inferred. | ✅ D-061 |
 | CON-67 | A rule has a title and details, and details are tracked across versions | `rule history` shows which details were added, removed, edited or unchanged between versions. | ⬜ — needs CON-61, and a decision on detail identity |
 | CON-64 | An agent can open a ticket | The MCP workflow starts from the agent: `gather_evidence` on an unknown reference opens the ticket rather than failing. | ⬜ — today the agent cannot start, and `ticket add` at the CLI is a required first step nobody expects |
 | CON-62 | Gemini as a provider | `CONSTAT_AI_PROVIDER=gemini` proposes rules through the same `parse` and the same gates, as an optional extra. | ⬜ — CON-60 built the seam; this is a second `Provider` implementation |

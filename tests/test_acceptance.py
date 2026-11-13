@@ -398,18 +398,33 @@ class TestTheCommandLine:
         assert "rule 1 created" in out
         assert "version 1 baselined" in out
 
-    def test_accept_requires_a_decider(self, tmp_path):
-        """No automatic approvals: there is no default for who decided."""
-        ws = self._setup(tmp_path)
-        with pytest.raises(SystemExit) as exc:
-            main(["--workspace", ws, "rule", "accept", "1"])
-        assert exc.value.code == 2
+    def test_accept_always_records_a_decider(self, tmp_path):
+        """No automatic approvals: a decision always names someone.
 
-    def test_reject_requires_a_decider(self, tmp_path):
+        This replaced an assertion that `--by` was *required*, which D-061
+        changed — the name may now be inferred from git config. The property
+        worth keeping was never the flag: it is that no decision is stored
+        without a decider, and that the record says how the name was obtained.
+        """
+        from constat.store import RuleProposals, Workspace
+
         ws = self._setup(tmp_path)
-        with pytest.raises(SystemExit) as exc:
-            main(["--workspace", ws, "rule", "reject", "1"])
-        assert exc.value.code == 2
+        assert main(["--workspace", ws, "rule", "accept", "1"]) == 0
+
+        with Workspace.open(ws) as workspace:
+            item = RuleProposals(workspace).find(1)
+        assert item.decided_by
+        assert item.decided_attribution in ("stated", "inferred")
+
+    def test_reject_always_records_a_decider(self, tmp_path):
+        from constat.store import RuleProposals, Workspace
+
+        ws = self._setup(tmp_path)
+        assert main(["--workspace", ws, "rule", "reject", "1"]) == 0
+
+        with Workspace.open(ws) as workspace:
+            item = RuleProposals(workspace).find(1)
+        assert item.decided_by
 
     def test_reject_says_it_means_inconclusive(self, tmp_path, capsys):
         ws = self._setup(tmp_path)

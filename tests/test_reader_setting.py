@@ -127,15 +127,18 @@ class TestMigrationDoesNotChangeBehaviour:
         main(["--workspace", ws, "init"])
         db = Path(ws) / "workspace.db"
 
-        # Rewind to schema 7 as a workspace created yesterday would be.
+        # Rewind to schema 7 as a workspace created yesterday would be. Both
+        # of 8's and 9's additions have to go, or their migrations fail on
+        # columns that are already there.
         connection = sqlite3.connect(db)
         connection.execute("DROP TABLE setting")
+        connection.execute("ALTER TABLE rule_proposal_decision DROP COLUMN attribution")
         connection.execute("UPDATE schema_meta SET schema_version = 7")
         connection.commit()
         connection.close()
 
-        with Workspace.open(ws) as workspace:   # migrates 7 -> 8
-            assert workspace.schema_version == 8
+        with Workspace.open(ws) as workspace:   # migrates 7 -> 8 -> 9
+            assert workspace.schema_version == 9
             assert Settings(workspace).reader == READER_PROVIDER
 
 
