@@ -58,6 +58,7 @@ justifies them. See [ARCHITECTURE.md](ARCHITECTURE.md) § "After the MVP".
 | [DECISIONS.md](DECISIONS.md) | Dated decision log. Why things are the way they are. |
 | [PROJECT_STATUS.md](PROJECT_STATUS.md) | Current state, the 20-session build roadmap, and the next single task. |
 | [BACKLOG.md](BACKLOG.md) | Ticket register (`CON-NN`), including the non-code legal and validation work. |
+| [USAGE.md](USAGE.md) | How to run it: the loop, the MCP setup, exit codes, and what each refusal means. |
 | [CLAUDE.md](CLAUDE.md) | Working agreement for AI-assisted sessions. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute, and the required DCO sign-off. |
 | [LICENSING_STRATEGY.md](LICENSING_STRATEGY.md) | Why Apache-2.0 + DCO, and what it means for a future sale. |
@@ -66,52 +67,28 @@ justifies them. See [ARCHITECTURE.md](ARCHITECTURE.md) § "After the MVP".
 ## Getting started
 
 Requires Python 3.11 or newer. One runtime dependency, Pydantic, for schema validation of
-persisted records (D-026).
+persisted records (D-026). Two optional extras: `mcp` for the agent surface, `ai` for a provider
+Constat calls itself. Neither is needed for the evidence pipeline.
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -e ".[dev]"
+.venv/bin/pip install -e ".[dev,mcp]"
+.venv/bin/constat --version
 ```
 
-Then:
+Then the whole loop, with an agent doing the reading:
 
 ```bash
-.venv/bin/constat --version
-.venv/bin/constat                # prints help
-
-# Set up a workspace and register repositories
-.venv/bin/constat init
-.venv/bin/constat repo add /path/to/repo --name subject-a
-.venv/bin/constat repo list
-
-# What changed between two revisions?
-.venv/bin/constat analyse --repo /path/to/repo --base v1.0.0 --target v1.1.0
-
-# What does this branch do now?
-.venv/bin/constat snapshot --repo /path/to/repo --rev main
+constat init
+constat repo add ~/git/billing --name billing
+constat ticket add 622            # gathers evidence across every registered repository
+constat rule proposals 622        # what a reading proposed, awaiting your decision
+constat rule accept 1 --by you    # the only thing that creates a rule
+constat publish 622               # to the repository's wiki, through the credential gate
 ```
 
-`analyse` reports file-level changes — added, modified, deleted, renamed with both paths. It
-compares **from the merge base**, so work done only on `base` after the fork is excluded rather
-than reported as a deletion (D-021), and the merge base is always stated so the result can be
-verified. A range supplied backwards is refused rather than shown as "no changes".
-
-`snapshot` lists the files present at a revision. It deliberately uses no change vocabulary: a
-state description must not label everything `ADDED` (D-022).
-
-Both commands collect evidence: commit metadata, and diff excerpts bounded at 400 lines per file
-and 4000 per comparison (D-023). Every excerpt records its true size, any omission and the reason
-for it, plus the exact `git` command that regenerates it in full — so bounding never makes Constat
-the only copy of the evidence. The budget is shared fairly across files rather than spent in path
-order, so a generated lockfile cannot starve a source file of its excerpt (D-024).
-
-Add `--json` to either command for the structured proposal: a versioned, validated record carrying
-the repository identity, the selection, commits, changes, evidence and a completeness statement.
-Each run produces a new proposal ID, with a stable `selection_key` identifying the range — so
-history stays append-only while lookup stays idempotent (D-025).
-
-Nothing is classified yet. Every option is required: there are no defaults for inputs this
-important, and `--repo` never falls back to the current directory.
+**[USAGE.md](USAGE.md) is the manual** — the three ways to have the evidence read, the MCP setup,
+every exit code, and a table of what each refusal means. Start there.
 
 Run the tests:
 
@@ -122,8 +99,10 @@ Run the tests:
 > **On NixOS** there is no system-wide `pip`. The `venv` above supplies one via `ensurepip`, so the
 > commands work unchanged — just don't expect `pip install` to work outside the virtual environment.
 
-Classification arrives in Session 08 and the first report in Session 09; see
-[PROJECT_STATUS.md](PROJECT_STATUS.md) and [BACKLOG.md](BACKLOG.md).
+`analyse` and `snapshot` also still exist. They predate the ticket workflow and are not part of it:
+`analyse` reports file-level changes between two revisions from the merge base (D-021), `snapshot`
+lists the files present at one revision using no change vocabulary (D-022). Both bound their diff
+excerpts and state every omission with the `git` command that regenerates it in full (D-023, D-024).
 
 ## Naming
 
