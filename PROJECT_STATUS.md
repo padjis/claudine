@@ -39,12 +39,17 @@ guessed. It is the only command that writes outside the workspace; `gather` cann
 accepting does not. Three egress points now exist (`document --payload`, MCP `get_payload`,
 `publish`) and all three go through the same credential detectors.
 
-**A rule-generating command now refuses when nothing can read the evidence** (D-059).
-`constat document <REF>` and `ticket add <REF>` exit 5 if `CONSTAT_AI_PROVIDER` is unset, naming
-the three ways forward; `--no-provider` gathers evidence and nothing else. The evidence path still
-needs no key — that guarantee is kept and is now stated out loud by a flag rather than discovered
-from a line of output. MCP is exempt by design: there the host supplies the model, so having no
-provider is correct (D-045), and a test asserts it.
+**A rule-generating command refuses when nothing can read the evidence** (D-059), and **who reads
+is a workspace setting** rather than a per-command flag (D-060):
+
+```bash
+constat init --reader mcp     # or: constat config reader mcp
+constat ticket add 615        # no flag needed, ever
+```
+
+`provider` is the default and keeps D-059's refusal; `mcp` turns it off because on that path
+having no provider is correct (D-045). `--no-provider` survives as a per-run override. The
+evidence path still needs no key.
 
 CON-42 is closed by CON-60. The pieces arrived separately — the trust boundary at D-046, storage at
 CON-51, the submit path at CON-52, the MCP host at CON-50, and finally a provider that issues the
@@ -364,6 +369,61 @@ other backends).
 
 Still standing: validation is at **zero discovery conversations** (CON-26), and `tryconstat.com`
 is unregistered (CON-21).
+
+---
+
+## D-060 — who reads the evidence is a workspace setting (2026-11-13) ✅
+
+A day of using D-059 found the flaw in it. The refusal was right; the way it had to be answered
+was not.
+
+### What went wrong
+
+`--no-provider` on every invocation was the signal for "something else will read this". That
+punished the **recommended** workflow: on MCP the host supplies the model, so having no provider is
+correct rather than a fault, and a user on that path met a refusal on every ticket. The first
+version of the message did not list MCP among the ways forward at all — it offered a user doing
+exactly the right thing a choice between buying API credits and working by hand.
+
+The modelling error underneath: how evidence gets read is a property of a *setup*, not of an
+invocation. Nobody alternates between an agent and a provider from one ticket to the next. A flag
+passed every single time is a configuration value wearing a flag's clothes.
+
+### What changed
+
+| File | Change |
+| --- | --- |
+| `constat/store/settings.py` | **new** — `Settings`, `reader`, and the validation. |
+| `constat/store/schema.py` | **schema 8**: a `setting` table, with the 7 → 8 migration. |
+| `constat/cli.py` | `init --reader`, a new `config reader` command, and the gate now consults the setting. |
+| `README.md`, `USAGE.md` | the loop no longer carries a flag; both also gained the venv-activation note after `pip: command not found` was hit twice. |
+
+### Tests — actually run
+
+`.venv/bin/python -m pytest` → **798 passed**, from 782. `tests/test_reader_setting.py` is new: 16
+tests. Mutation-checked with five mutations, each caught by its named test — ignoring the setting,
+flipping the default to `mcp`, migrating existing workspaces to `mcp`, letting `--no-provider`
+silently reconfigure the workspace, and accepting an invalid reader.
+
+### Two decisions inside this one
+
+- **`setting` is the only table here that is not append-only.** A setting says how the workspace is
+  operated and never what anyone decided, so a change history would imply an authority it does not
+  have. A test asserts a second write replaces rather than appends.
+- **Existing workspaces migrate to `provider`, not `mcp`.** Setting them to `mcp` would silently
+  switch off a refusal someone may be relying on. A migration must not change behaviour on a guess.
+
+### Known issues
+
+- **CON-64 is still open.** `gather_evidence` cannot open a ticket, so `constat ticket add <REF>`
+  remains a required manual step before an agent can do anything — surprising, and the next thing
+  to remove from that path.
+- **Readings still accumulate on recompute** (noted under CON-56's successor work). Re-running a
+  ticket adds proposals rather than superseding them, and accepting one does not retire its
+  duplicates.
+- **D-059 was amended one day after landing.** Worth noting as a pattern rather than an incident:
+  it was designed from the complaint and not from using the result, and the gap showed within a
+  day of real use.
 
 ---
 

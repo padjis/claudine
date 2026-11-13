@@ -8,6 +8,49 @@ Format: `## D-NNN · YYYY-MM-DD · Title` → **Decision**, **Context**, **Conse
 
 ---
 
+## D-060 · 2026-11-13 · Who reads the evidence is a workspace setting, not a per-command flag
+
+**Amends D-059 one day later, after using it.** The refusal stays; the way it is answered changes.
+
+**Decision.** `setting.reader` is `mcp` or `provider`, stored in the workspace (schema 8). With
+`mcp`, no rule-generating command asks for a provider. `constat init --reader mcp` sets it at
+creation and `constat config reader mcp` changes it afterwards; `--no-provider` survives as a
+per-run override.
+
+**Context.** D-059 made `ticket add` and `document` refuse when nothing could read the evidence,
+and the signal for "something else will read it" was `--no-provider` on every invocation. That
+punished the **recommended** workflow: on MCP the host supplies the model (D-045), so having no
+provider is correct rather than a fault, and a user on that path met a refusal on every ticket.
+The first version of the message did not even list MCP among the ways forward.
+
+**The modelling error, which is the real content of this entry.** How evidence gets read is a
+property of a *setup*, not of an invocation. Nobody alternates between an agent and a provider from
+one ticket to the next; they choose once and keep it for months. Asking per-command for an answer
+that never changes is the defect — not the refusal, which still catches the case it was built for.
+A flag that is passed every single time is a configuration value wearing a flag's clothes.
+
+**Consequences.**
+
+- **Settings are not append-only**, unlike everything else in this store. A setting says how the
+  workspace is *operated* and never what anyone *decided*, so keeping a history of changes would
+  imply an authority it does not have. The one table that may be updated in place is the one
+  carrying no governance meaning.
+- **The default is `provider`, the strict one.** A workspace that never said how it reads keeps
+  D-059's refusal, and turning it off is deliberate. Defaults should lean towards the refusal.
+- **Existing workspaces migrate to `provider`.** Setting them to `mcp` would silently switch off a
+  refusal someone may be relying on — a migration must not change behaviour on a guess.
+- **The refusal now teaches the cure.** It names `constat config reader mcp` first, so the one time
+  an MCP user meets it, they fix it permanently rather than learning a flag to repeat.
+- **`--no-provider` stays**, for the genuine one-off: gathering evidence on a provider workspace
+  without spending anything. It is no longer the mechanism for an entire workflow.
+- **Constat still cannot infer this.** `ticket add` on a machine with no provider looks identical
+  whether an agent is about to read the evidence or the key was forgotten. The setting is the
+  answer because there is no way to deduce one.
+
+**Status.** accepted
+
+---
+
 ## D-059 · 2026-11-12 · A rule-generating command refuses when nothing can read the evidence
 
 **Amends D-003 and D-041 at the command boundary.** Neither is superseded: both remain true of the

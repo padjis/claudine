@@ -11,9 +11,22 @@ silently; a trigger cannot be bypassed by forgetting to call the right helper.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 SCHEMA = """
+-- Workspace settings: answers that belong to a setup rather than to a run.
+--
+-- `reader` is who reads the evidence — `mcp` (an agent, through the MCP
+-- server) or `provider` (Constat itself). D-059 refuses a rule-generating
+-- command when nothing can read, and the only way to tell "an agent will read
+-- this next" from "you forgot the key" is to be told. Being told once, here,
+-- beats being asked on every ticket (D-060).
+CREATE TABLE setting (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE schema_meta (
     id              INTEGER PRIMARY KEY CHECK (id = 1),
     schema_version  INTEGER NOT NULL,
@@ -506,5 +519,18 @@ MIGRATIONS: dict[int, tuple[str, ...]] = {
     6: (
         "ALTER TABLE rule_proposal"
         " ADD COLUMN model_attested INTEGER NOT NULL DEFAULT 0",
+    ),
+    # 7 -> 8: workspace settings, and `reader` (D-060).
+    #
+    # Existing workspaces are set to `provider`, which is exactly how they
+    # behave today: a rule-generating command refuses without one. Defaulting
+    # them to `mcp` would silently switch off a refusal someone is relying on.
+    7: (
+        "CREATE TABLE setting ("
+        " key TEXT PRIMARY KEY,"
+        " value TEXT NOT NULL,"
+        " updated_at TEXT NOT NULL)",
+        "INSERT INTO setting (key, value, updated_at)"
+        " VALUES ('reader', 'provider', '1970-01-01T00:00:00+00:00')",
     ),
 }

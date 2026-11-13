@@ -24,6 +24,7 @@ from .errors import (
 )
 from .evidence import collect_evidence, describe_commit
 from .mapping import change_proposal, commit_record, state_proposal
+from .store import READER_MCP, READERS, Settings
 from .store import (
     Catalogue,
     Review,
@@ -218,9 +219,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-provider",
         action="store_true",
         help=(
-            "gather the evidence and nothing else. Without this, a command "
-            "that would propose no rules because no provider is configured "
-            "is refused rather than quietly reporting none (D-059)."
+            "do not have Constat read the evidence. **This is the flag to use "
+            "with MCP**, where your agent does the reading. Without it, a "
+            "command that would propose no rules because nothing is "
+            "configured to read is refused rather than quietly reporting "
+            "none (D-059)."
         ),
     )
     document.add_argument(
@@ -302,9 +305,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-provider",
         action="store_true",
         help=(
-            "open the ticket and gather its evidence without proposing rules. "
-            "`ticket add` gathers, so it is refused without a provider for the "
-            "same reason `document` is (D-059)."
+            "open the ticket and gather its evidence without having Constat "
+            "read it. **Use this with MCP** — your agent reads the evidence, "
+            "so Constat needs no provider. `ticket add` gathers, so it is "
+            "refused without one for the same reason `document` is (D-059)."
         ),
     )
 
@@ -358,7 +362,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
-    subparsers.add_parser(
+    init = subparsers.add_parser(
         "init",
         help="create a workspace",
         description=(
@@ -366,6 +370,34 @@ def build_parser() -> argparse.ArgumentParser:
             "and the immutable record of approvals. Refuses to overwrite an "
             "existing workspace."
         ),
+    )
+    init.add_argument(
+        "--reader",
+        choices=sorted(READERS),
+        default=None,
+        help=(
+            "who reads the evidence: `mcp` if an agent will, through the MCP "
+            "server, or `provider` if Constat should call a model itself "
+            "(default). Change it later with `config reader`."
+        ),
+    )
+
+    config = subparsers.add_parser(
+        "config",
+        help="show or change how this workspace is operated",
+        description=(
+            "Settings belong to a setup rather than to a run. They say how "
+            "this workspace is operated and never what anyone decided, so "
+            "unlike decisions they can be changed."
+        ),
+    )
+    config_actions = config.add_subparsers(dest="config_action")
+    config_reader = config_actions.add_parser(
+        "reader", help="show or set who reads the evidence"
+    )
+    config_reader.add_argument(
+        "value", nargs="?", choices=sorted(READERS), default=None,
+        help="omit to show the current value",
     )
 
     analyse = subparsers.add_parser(
@@ -436,15 +468,24 @@ def _run_init(args: argparse.Namespace) -> int:
         with Workspace.create(args.workspace) as workspace:
             path = workspace.path
             version = workspace.schema_version
+            if args.reader is not None:
+                Settings(workspace).set_reader(args.reader)
+            reader = Settings(workspace).reader
     except WorkspaceError as exc:
         print(f"{PROG}: error: {exc}", file=sys.stderr)
         return EXIT_WORKSPACE
 
     print(f"workspace:  {path}")
     print(f"schema:     version {version}")
+    print(f"reader:     {reader}")
     print()
     print("Created. It holds registered repositories, tickets and documents.")
-    print("Nothing is registered yet: `repo add` arrives with CON-32.")
+    print("Register a repository with `repo add`, then open a ticket.")
+    if reader != READER_MCP:
+        print()
+        print("Reading through an MCP agent rather than a provider?")
+        print("Run `constat config reader mcp` once, and Constat will not")
+        print("ask for a provider of its own.")
     return EXIT_OK
 
 
@@ -738,7 +779,9 @@ def _run_mcp(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
-def _refuse_without_a_provider(args: argparse.Namespace) -> None:
+def _refuse_without_a_provider(
+    args: argparse.Namespace, workspace: Workspace | None = None
+) -> None:
     """Refuse a rule-generating command when nothing can read the evidence.
 
     D-059. `gather` itself still runs with no provider — the library keeps the
@@ -757,6 +800,13 @@ def _refuse_without_a_provider(args: argparse.Namespace) -> None:
     if getattr(args, "no_provider", False):
         return
 
+    # A workspace that reads through MCP has no provider *by design*: the host
+    # supplies the model (D-045). Asking it to say so on every ticket was the
+    # flaw D-060 fixes — the question belongs to the setup, and the setup
+    # answered it once.
+    if workspace is not None and Settings(workspace).reader == READER_MCP:
+        return
+
     provider = resolve_provider()  # raises for a misconfigured one
     if provider.name != NULL_PROVIDER_NAME:
         return
@@ -766,12 +816,59 @@ def _refuse_without_a_provider(args: argparse.Namespace) -> None:
         "evidence and no rules would be proposed. Refusing rather than "
         "writing a document that says no rules were identified, which is "
         "true and not what you asked for.\n"
-        "  - set CONSTAT_AI_PROVIDER=anthropic (with ANTHROPIC_API_KEY) to "
-        "have Constat read it,\n"
+        "  - using MCP? run `constat config reader mcp` once and this stops "
+        "asking: your agent does the reading, so Constat is right to have no "
+        "provider of its own,\n"
+        "  - or set CONSTAT_AI_PROVIDER=anthropic (with ANTHROPIC_API_KEY) "
+        "to have Constat read it,\n"
         "  - or read it yourself: `document <REF> --no-provider --payload` "
-        "then `rule submit`,\n"
-        "  - or pass --no-provider to gather the evidence and nothing else."
+        "then `rule submit`."
     )
+
+
+def _run_config(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    """Show or change a workspace setting."""
+    if args.config_action is None:
+        parser.parse_args(["config", "--help"])
+        return EXIT_USAGE
+
+    try:
+        with Workspace.open(args.workspace) as workspace:
+            settings = Settings(workspace)
+            if args.value is None:
+                print(f"reader: {settings.reader}")
+                if settings.reader == READER_MCP:
+                    print(
+                        "  An agent reads the evidence through `constat mcp`. "
+                        "No provider is needed and none is asked for."
+                    )
+                else:
+                    print(
+                        "  Constat reads the evidence itself. A rule-generating "
+                        "command refuses without CONSTAT_AI_PROVIDER set."
+                    )
+                return EXIT_OK
+
+            settings.set_reader(args.value)
+            print(f"reader: {args.value}")
+            if args.value == READER_MCP:
+                print(
+                    "\n`ticket add` and `document` will no longer ask for a "
+                    "provider. Your agent does the reading; accept or reject "
+                    "here, where no tool can."
+                )
+            else:
+                print(
+                    "\nSet CONSTAT_AI_PROVIDER (and its key) so Constat can "
+                    "read the evidence itself."
+                )
+            return EXIT_OK
+    except InvalidInput as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    except WorkspaceError as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        return EXIT_WORKSPACE
 
 
 def _run_publish(args: argparse.Namespace) -> int:
@@ -838,8 +935,8 @@ def _run_document(args: argparse.Namespace) -> int:
         return _run_export(args)
 
     try:
-        _refuse_without_a_provider(args)
         with Workspace.open(args.workspace) as workspace:
+            _refuse_without_a_provider(args, workspace)
             result = gather(
                 workspace,
                 args.reference,
@@ -890,7 +987,7 @@ def _run_ticket(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
                 # behind: an opened ticket with no evidence and no rules is
                 # worse than no ticket, because `ticket add` then refuses to
                 # open it again (D-059).
-                _refuse_without_a_provider(args)
+                _refuse_without_a_provider(args, workspace)
                 entry = tickets.add(args.reference)
                 print(f"opened ticket: {entry.reference}")
 
@@ -1154,6 +1251,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "init":
         return _run_init(args)
+
+    if args.command == "config":
+        return _run_config(args, parser)
 
     if args.command == "repo":
         return _run_repo(args, parser)

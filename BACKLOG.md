@@ -103,6 +103,8 @@ forces them.
 | CON-57 | A publishing port, and the default target | A document is published to the repository's page tool, through the credential gate. | ✅ D-058 |
 | CON-58 | Read decisions back, with provenance | A decision records its channel and how identity was established. | ⬜ **next** — the port's `read_decisions` raises `DecisionsNotReadable` until this lands |
 | CON-59 | Confluence, GitBook, GitLab docs backends | Each behind the same port, as optional extras. | ⬜ — the port exists; each backend is a `Target` implementation |
+| CON-65 | Who reads the evidence is a workspace setting | `ticket add` needs no flag on an MCP workspace; `init --reader` and `config reader` set it. | ✅ D-060 |
+| CON-64 | An agent can open a ticket | The MCP workflow starts from the agent: `gather_evidence` on an unknown reference opens the ticket rather than failing. | ⬜ — today the agent cannot start, and `ticket add` at the CLI is a required first step nobody expects |
 | CON-62 | Gemini as a provider | `CONSTAT_AI_PROVIDER=gemini` proposes rules through the same `parse` and the same gates, as an optional extra. | ⬜ — CON-60 built the seam; this is a second `Provider` implementation |
 | CON-63 | ChatGPT as a provider | `CONSTAT_AI_PROVIDER=openai` likewise. The error D-041 raises for an unimplemented name currently names this one as the example. | ⬜ |
 | CON-61 | Read a frozen version's behaviours and anchors back | `rule history` can show what a version's behaviours and anchors were at the time it was accepted, not only its name and statement. | ⬜ — completes CON-14's recoverability criterion |
@@ -330,6 +332,22 @@ one asserting stdout stayed empty.
 
 **CON-49 was going to be the submit path too.** It split, because submitting needs somewhere to
 put a proposal and there is nowhere — see CON-51.
+
+### CON-64 — the MCP workflow cannot start from the agent
+
+Found by trying to use it: `gather_evidence` raises `no ticket '622'` unless someone has already
+run `constat ticket add 622` at the command line. There is no tool that opens a ticket, so an
+agent asked to "work out what ticket 622 changed" fails at the first step on a clean workspace.
+
+The question to settle is whether opening a ticket is a governance act. It is not obviously one —
+a ticket is a container for a document, it carries no authority, and `ticket add` already gathers
+immediately, so letting `gather_evidence` open one adds no capability beyond what it already has.
+Against: D-055's list is deliberately short, and every addition to it has to be argued rather than
+assumed.
+
+If it lands, the refusal it replaces must not simply vanish. A reference that matches nothing in
+any repository should still be reported as `not_found` rather than silently creating an empty
+ticket, or the agent will cheerfully open tickets for typos.
 
 ### CON-62 / CON-63 — a second and third provider are small, and that is the test of the seam
 

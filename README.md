@@ -72,20 +72,32 @@ Constat calls itself. Neither is needed for the evidence pipeline.
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -e ".[dev,mcp]"
-.venv/bin/constat --version
+source .venv/bin/activate          # or spell out .venv/bin/… every time
+pip install -e ".[dev,mcp]"
+constat --version
 ```
+
+**Activate the virtual environment**, or `pip` and `constat` are not on your `PATH`. Without it
+you get `pip: command not found` on a system with no global pip — NixOS, for instance — and
+`constat: command not found` everywhere. The alternative is to spell out `.venv/bin/pip` and
+`.venv/bin/constat`. An MCP config always needs the absolute path, because your client has neither
+your `PATH` nor an activated venv.
 
 Then the whole loop, with an agent doing the reading:
 
 ```bash
-constat init
+constat init --reader mcp         # your agent will read the evidence
 constat repo add ~/git/billing --name billing
 constat ticket add 622            # gathers evidence across every registered repository
-constat rule proposals 622        # what a reading proposed, awaiting your decision
+#   …ask your agent to propose the rules this ticket changed…
+constat rule proposals 622        # what it proposed, awaiting your decision
 constat rule accept 1 --by you    # the only thing that creates a rule
 constat publish 622               # to the repository's wiki, through the credential gate
 ```
+
+`--reader` says who reads the evidence, once per workspace: `mcp` for an agent through the MCP
+server, or `provider` for Constat calling a model itself with `CONSTAT_AI_PROVIDER`. Change it
+later with `constat config reader`.
 
 **[USAGE.md](USAGE.md) is the manual** — the three ways to have the evidence read, the MCP setup,
 every exit code, and a table of what each refusal means. Start there.
@@ -93,11 +105,12 @@ every exit code, and a table of what each refusal means. Start there.
 Run the tests:
 
 ```bash
-.venv/bin/python -m pytest
+python -m pytest
 ```
 
 > **On NixOS** there is no system-wide `pip`. The `venv` above supplies one via `ensurepip`, so the
-> commands work unchanged — just don't expect `pip install` to work outside the virtual environment.
+> commands work unchanged once activated — just don't expect `pip install` to work outside the
+> virtual environment.
 
 `analyse` and `snapshot` also still exist. They predate the ticket workflow and are not part of it:
 `analyse` reports file-level changes between two revisions from the merge base (D-021), `snapshot`

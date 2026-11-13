@@ -58,7 +58,7 @@ flowchart TD
         PROP["store/proposals.py — rule proposals, append-only"]
     end
 
-    DB["SQLite — schema 7; triggers enforce append-only"]
+    DB["SQLite — schema 8; triggers enforce append-only"]
 
     CLI --> OPS
     MCP --> OPS
@@ -268,7 +268,8 @@ constat/
     targets/
       git_pages.py    # the default target: a git-backed docs repository
   store/
-    schema.py         # schema 7 + migrations + append-only triggers
+    schema.py         # schema 8 + migrations + append-only triggers
+    settings.py       # workspace settings; the one table not append-only (D-060)
     workspace.py      # connection, versioning, transactions
     registry.py       # registered repositories (D-025, D-027, D-028)
     tickets.py        # tickets and their one document (D-029, D-032)

@@ -699,6 +699,21 @@ class TestARuleGeneratingCommandRefusesWithoutAProvider:
         assert "rule submit" in err                     # read it yourself
         assert "--no-provider" in err                   # evidence only
 
+    def test_the_refusal_names_mcp_first(self, registered, monkeypatch, capsys):
+        """Found by hitting it. The MCP path is the recommended one, and on it
+        having no provider is *correct* — the agent reads. The first version
+        of this message omitted MCP entirely, so the recommended workflow hit
+        a refusal on every ticket that told it to buy API credits or work by
+        hand. Neither was what it was doing."""
+        from constat.cli import main
+
+        monkeypatch.delenv("CONSTAT_AI_PROVIDER", raising=False)
+        main(["--workspace", str(registered), "ticket", "add", "622"])
+        err = capsys.readouterr().err
+
+        assert "MCP" in err
+        assert err.index("MCP") < err.index("CONSTAT_AI_PROVIDER=anthropic")
+
     def test_no_provider_gathers_the_evidence(self, registered, monkeypatch):
         from constat.cli import EXIT_OK, main
 

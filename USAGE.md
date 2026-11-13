@@ -28,6 +28,10 @@ Two optional extras, neither needed for the evidence pipeline:
 (`source .venv/bin/activate`) or you must spell out `.venv/bin/constat`. For an MCP config, always
 use the absolute path — your client has neither your PATH nor an activated venv.
 
+The same applies to `pip`. On a system with no global pip — NixOS, for instance — `pip install …`
+fails with `command not found` until you activate, which is the better failure: it cannot quietly
+install into the wrong environment. Use `.venv/bin/pip` or activate first.
+
 ---
 
 ## 2. Decide who reads the evidence
@@ -41,6 +45,18 @@ start, because a rule-generating command refuses if the answer is "nothing" (D-0
 | **MCP** — `constat mcp` driven by an agent | your client's host | none beyond your existing plan | self-reported |
 | **Provider** — `CONSTAT_AI_PROVIDER=anthropic` | Constat | billed to your API account | attested |
 | **By hand** — export, read, submit | you | whatever you use | self-reported |
+
+**Tell the workspace once**, and no command asks again (D-060):
+
+```bash
+constat init --reader mcp          # at creation
+constat config reader mcp          # or afterwards
+constat config reader              # show it
+```
+
+`provider` is the default, and on it a rule-generating command refuses when
+`CONSTAT_AI_PROVIDER` is unset — that refusal is the point (D-059). On `mcp` there is nothing to
+configure, because your agent does the reading.
 
 > **Claude Pro does not include API credits.** They are separate products. If you have a Pro
 > subscription and no credits, use the MCP path — that is what it exists for.
@@ -71,15 +87,45 @@ cloned twice is recognised as one.
 
 ### With MCP (recommended on a Pro subscription)
 
+The server does not replace the CLI — it does the **middle third**. You set up, the agent reads,
+you decide.
+
+| Phase | Where | Commands |
+| --- | --- | --- |
+| Set up | your terminal | `init`, `repo add`, `ticket add <REF> --no-provider` |
+| Read | your agent | `gather_evidence`, `get_payload`, `submit_rules` |
+| Decide | your terminal | `rule proposals`, `rule accept --by <who>` |
+
 ```bash
 claude mcp add constat -- /absolute/path/to/.venv/bin/constat --workspace ~/.constat mcp
 ```
 
-Then ask the agent in plain language:
+**The `--workspace` here must be the workspace you set up in.** If `constat init` used the default,
+that is `~/.constat` and both must agree. Point them at different places and the agent reports
+`no ticket '622'` for a ticket you can see perfectly well.
+
+**Say so once**, and then nothing asks for a provider again:
+
+```bash
+constat config reader mcp
+```
+
+**Open the ticket before you ask the agent.** `gather_evidence` works on a ticket that already
+exists and there is no tool that opens one, so the workflow cannot start from the agent:
+
+```bash
+constat ticket add 622
+```
+
+`--no-provider` still exists, but you no longer need it here. It is a per-run override for the
+genuine one-off — gathering evidence on a `provider` workspace without spending anything — and it
+does not change the setting.
+
+Then ask in plain language:
 
 > Use constat to gather evidence for ticket 622 and propose the business rules it changed.
 
-It has four tools — `gather_evidence`, `get_payload`, `submit_rules`, `list_rule_proposals`.
+Four tools — `gather_evidence`, `get_payload`, `submit_rules`, `list_rule_proposals`.
 **There is no accept tool and there will not be one** (D-055). The agent reads; you decide.
 
 ### With a provider
@@ -208,7 +254,7 @@ the documentation; this table is the short version.
 
 | Message | What it means | What to do |
 | --- | --- | --- |
-| `CONSTAT_AI_PROVIDER is not set, so nothing would read this ticket's evidence` | A rule-generating command with nothing able to read (D-059) | Configure a provider, use MCP, or pass `--no-provider` for evidence only |
+| `CONSTAT_AI_PROVIDER is not set, so nothing would read this ticket's evidence` | A rule-generating command on a `provider` workspace with nothing configured (D-059) | Using MCP? `constat config reader mcp`, once. Otherwise configure a provider, or `--no-provider` for evidence only |
 | `names a provider this version of Constat does not implement` | A typo, or a provider that is not built yet | `anthropic` is the only one today; Gemini is CON-62, ChatGPT CON-63 |
 | `needs ANTHROPIC_API_KEY in the environment` | Provider named, credential absent | Export the key. It is never written to a file |
 | `the 'anthropic' package is not installed` | The `ai` extra is missing | `pip install -e ".[ai]"` |
@@ -219,6 +265,7 @@ the documentation; this table is the short version.
 | `could not determine the default branch` | `origin/HEAD` is not set | `git remote set-head origin -a`, or pass `--default-branch` |
 | `whose documentation convention Constat does not know` | Publishing to an unrecognised host | Pass `--target` with the documentation repository URL |
 | `a workspace already exists` | `init` on an existing workspace | Nothing was touched. Remove the file deliberately if you mean to start over |
+| `no ticket '622'. Open one with \`ticket add\`` | Over MCP: usually the config's `--workspace` differs from the one you set up in, or the ticket was never opened | Make the paths agree, then `constat ticket add 622 --no-provider` |
 
 Two that are *not* refusals, and matter:
 
