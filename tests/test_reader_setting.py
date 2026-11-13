@@ -160,3 +160,66 @@ class TestTheSettingIsValidated:
 
             rows = ws.execute("SELECT * FROM setting WHERE key = 'reader'").fetchall()
             assert len(rows) == 1
+
+
+class TestTheNoRulesNoteMatchesTheReader:
+    """Found by using it. On an MCP workspace, "no AI provider is configured"
+    reports a misconfiguration to someone whose setup is correct and complete
+    — product rule 1's failure mode in the product's own output, which is the
+    same shape of bug D-056 fixed one layer up.
+
+    The note is set in one place (`gather`) and the CLI follows it. They each
+    worked it out separately at first, and said different things.
+    """
+
+    def test_an_mcp_workspace_is_not_told_it_is_misconfigured(self, home, capsys):
+        main(["--workspace", home, "config", "reader", "mcp"])
+        main(["--workspace", home, "ticket", "add", "622"])
+        out = capsys.readouterr().out
+
+        assert "no AI provider is configured" not in out
+        assert "reads through an agent" in out
+
+    def test_it_says_what_to_do_instead(self, home, capsys):
+        main(["--workspace", home, "config", "reader", "mcp"])
+        main(["--workspace", home, "ticket", "add", "622"])
+        out = capsys.readouterr().out
+
+        assert "ask your agent" in out
+
+    def test_a_provider_workspace_keeps_the_original_note(self, home, capsys):
+        """D-041's wording must survive: there, the configuration really is
+        the problem."""
+        main(["--workspace", home, "ticket", "add", "622", "--no-provider"])
+        out = capsys.readouterr().out
+
+        assert "no AI provider is configured" in out
+
+    def test_the_document_body_says_the_same_thing(self, home):
+        """The line and the body must not diverge — the line is what most
+        people read, and the body is what gets published."""
+        from constat.ai import MCP_READER_NOTE
+        from constat.store import TicketStore, Workspace
+
+        main(["--workspace", home, "config", "reader", "mcp"])
+        main(["--workspace", home, "ticket", "add", "622"])
+
+        with Workspace.open(home) as ws:
+            body = TicketStore(ws).document("622").body
+
+        assert MCP_READER_NOTE in body
+        assert "No AI provider is configured" not in body
+
+    def test_a_published_document_does_not_report_a_fault(self, home):
+        """This body is what reaches a wiki (D-058). Telling a business reader
+        that Constat is misconfigured, when it is not, is worse there than in
+        a terminal."""
+        from constat.store import TicketStore, Workspace
+
+        main(["--workspace", home, "config", "reader", "mcp"])
+        main(["--workspace", home, "ticket", "add", "622"])
+
+        with Workspace.open(home) as ws:
+            body = TicketStore(ws).document("622").body
+
+        assert "not a fault" in body

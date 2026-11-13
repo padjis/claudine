@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from .ai import (
     NULL_PROVIDER_NAME,
@@ -35,6 +35,7 @@ from .ai import (
     redact,
     scan,
 )
+from .ai import MCP_READER_NOTE
 from .ai import resolve as resolve_provider
 from .ai.scanning import DocumentFinding, guard_publication
 from .errors import PublishRecordFailed
@@ -45,6 +46,7 @@ from .evidence import DEFAULT_LIMITS, EvidenceBundle, ExcerptLimits, collect_evi
 from .git.adapter import Repository, Revision, discover_repository, resolve_revision
 from .git.diff import compare_revisions
 from .models import RegisteredRepository
+from .store import READER_MCP, Settings
 from .store import Catalogue, Registry, RuleProposals, TicketStore, Workspace
 from .store.workspace import utc_now
 from .tickets import TicketMatch, TicketStatus, find_ticket_commits
@@ -868,6 +870,13 @@ def gather(
     )
 
     interpretation = provider.interpret(payload)
+
+    # A workspace that reads through an agent has no provider *by design*, so
+    # the null provider's "no AI provider is configured" would report a fault
+    # to someone whose setup is correct (D-060). Scoped to the note, because
+    # everything else about the run is identical.
+    if not interpretation.ran and Settings(workspace).reader == READER_MCP:
+        interpretation = replace(interpretation, note=MCP_READER_NOTE)
 
     document_id = _document_id(workspace, reference)
     run_id = open_run(workspace, reference, "gather_evidence")

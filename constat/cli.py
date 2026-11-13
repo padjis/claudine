@@ -34,7 +34,7 @@ from .store import (
     Workspace,
     database_path,
 )
-from .ai import NULL_PROVIDER_NAME, PROVIDER_ENV
+from .ai import MCP_READER_NOTE, NULL_PROVIDER_NAME, PROVIDER_ENV
 from .ai import as_dict as payload_as_dict
 from .ai import resolve as resolve_provider
 from .operations import export_payload, gather, publish_document, submit_reply
@@ -759,6 +759,12 @@ def _print_interpretation(interpretation) -> None:
             f"  no rules identified by {interpretation.describe()} — "
             "not a finding that none exist"
         )
+    elif interpretation.note == MCP_READER_NOTE:
+        # Follows the note `gather` set rather than deciding again. The summary
+        # line and the document body said different things when each worked it
+        # out for itself, and the line is what most people read.
+        print("  no rules identified — this workspace reads through an agent")
+        print("  (ask your agent to propose this ticket's rules; nothing is wrong)")
     else:
         print("  no rules identified — no AI provider is configured")
         print("  (that is a statement about configuration, not about the code)")

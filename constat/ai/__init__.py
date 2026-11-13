@@ -10,6 +10,7 @@ where the personal-data question deferred at D-023 is settled.
 """
 
 from .provider import (
+    MCP_READER_NOTE,
     NO_PROVIDER_NOTE,
     NULL_PROVIDER_NAME,
     Interpretation,
@@ -40,6 +41,7 @@ from .settings import PROVIDER_ENV, resolve
 
 __all__ = [
     "COMMIT_MESSAGE",
+    "MCP_READER_NOTE",
     "NO_PROVIDER_NOTE",
     "NULL_PROVIDER_NAME",
     "PROVIDER_ENV",

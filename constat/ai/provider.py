@@ -34,6 +34,20 @@ NO_PROVIDER_NOTE = (
     "provider (D-039); the evidence does not."
 )
 
+MCP_READER_NOTE = (
+    "Constat did not read this evidence, because this workspace reads through "
+    "an agent (`reader = mcp`). That is the configuration working, not a "
+    "fault: ask your agent to propose the rules for this ticket, and they will "
+    "appear in the review queue. Nothing here says the code has no rules."
+)
+"""The note when the null provider runs on an MCP workspace.
+
+`NO_PROVIDER_NOTE` would be a lie here. It reports a misconfiguration to
+someone whose configuration is correct and complete, which is product rule 1's
+failure mode in the product's own output — the same shape of bug D-056 fixed
+one layer up. Having no provider is the *point* of this workspace (D-045,
+D-060), so the note says what to do rather than what is missing."""
+
 
 @dataclass(frozen=True)
 class Interpretation:
